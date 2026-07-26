@@ -29,10 +29,7 @@
       <div class="card card-pad">
         <div class="section-title" style="margin-top:0">Contas fixas mensais</div>
         <div id="fin-fixas-resumo"><div class="empty">Carregando…</div></div>
-        <div class="mt" style="display:flex;gap:8px;flex-wrap:wrap">
-          <a class="btn btn-sm btn-primary" href="#/recorrentes">fixas da empresa →</a>
-          <a class="btn btn-sm" href="#/recorrentes-pessoal">fixas pessoais →</a>
-        </div>
+        <div class="mt"><a class="btn btn-sm btn-primary" href="#/recorrentes">ver contas fixas →</a></div>
       </div>
       <div class="card card-pad">
         <div class="section-title" style="margin-top:0">Contas a receber</div>

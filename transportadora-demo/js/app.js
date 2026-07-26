@@ -15,8 +15,7 @@
       { id: "painelfinanceiro", rotulo: "Dashboard financeiro" },
       { id: "financeiro", rotulo: "Contas a pagar" },
       { id: "receber", rotulo: "Contas a receber" },
-      { id: "recorrentes", rotulo: "Fixas — empresa" },
-      { id: "recorrentes-pessoal", rotulo: "Fixas — pessoal" },
+      { id: "recorrentes", rotulo: "Contas fixas" },
       { id: "resultado", rotulo: "Resultado anual" },
     ] },
     { id: "frota-grupo", rotulo: "Frota", icone: "fleet", itens: [
