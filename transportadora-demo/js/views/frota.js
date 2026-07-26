@@ -70,7 +70,7 @@
     const carretas = state.veiculos.filter(v => v.tipo === "carreta" && (!existente || v.placa !== existente.placa));
     const atual = existente ? existente.carreta_placa : null;
     return `
-    <div><label>Carreta vinculada</label><select id="vf-carreta">
+    <div class="full"><label>Carreta vinculada</label><select id="vf-carreta">
       <option value="">nenhuma</option>
       ${carretas.map(c => `<option value="${c.placa}" ${atual === c.placa ? "selected" : ""}>${U.placaFmt(c.placa)}</option>`).join("")}
     </select></div>`;
@@ -80,7 +80,7 @@
     if (tipoSelecionado !== "cavalo") return "";
     const atualId = existente ? existente.motorista_id : null;
     return `
-    <div><label>Motorista vinculado</label><select id="vf-motorista">
+    <div class="full"><label>Motorista vinculado</label><select id="vf-motorista">
       <option value="">sem motorista</option>
       ${state.motoristas.map(m => {
         const outro = state.veiculos.find(v => v.motorista_id === m.id && (!existente || v.placa !== existente.placa));
