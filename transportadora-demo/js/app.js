@@ -17,7 +17,10 @@
       { id: "recorrentes", rotulo: "Contas recorrentes" },
       { id: "resultado", rotulo: "Resultado anual" },
     ] },
-    { id: "frota", rotulo: "Frota", icone: "fleet" },
+    { id: "frota-grupo", rotulo: "Frota", icone: "fleet", itens: [
+      { id: "frota", rotulo: "Veículos" },
+      { id: "manutencoes", rotulo: "Manutenções" },
+    ] },
     { id: "motoristas", rotulo: "Motoristas", icone: "users" },
   ];
 

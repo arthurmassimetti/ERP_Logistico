@@ -222,16 +222,27 @@ tr.highlight-row { animation: rowflash 2.4s ease-out; }
 .kv { display: grid; grid-template-columns: 150px 1fr; gap: 6px 14px; font-size: 13px; }
 .kv dt { color: var(--text-3); }
 .kv dd { font-weight: 600; }
+
+/* select compacto — trocar um status direto na tela, sem abrir formulário
+   (disponibilidade do motorista, situação do veículo) */
+.select-sm {
+  border: 1px solid var(--border-2); border-radius: 8px; padding: 4px 8px;
+  background: var(--surface); color: var(--text); font-size: 12.5px; font-weight: 600;
+}
 .modal .divider { height: 1px; background: var(--border); margin: 14px 0; }
+
+/* abas simples (ex.: Ordens / Histórico em Manutenções) */
+.tabs { display: flex; gap: 8px; }
 
 /* forms */
 .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .form-grid .full { grid-column: 1 / -1; }
 .form-grid label { font-size: 11.5px; font-weight: 700; color: var(--text-2); display: block; margin-bottom: 4px; }
 .req { color: var(--danger); margin-left: 2px; }
-.form-grid input, .form-grid select {
+.form-grid input, .form-grid select, .form-grid textarea {
   width: 100%; border: 1px solid var(--border-2); border-radius: 8px; padding: 8px 10px;
 }
+.form-grid textarea { resize: vertical; min-height: 60px; }
 .calc-line { background: var(--primary-soft); border: 1px dashed var(--primary); border-radius: 8px; padding: 10px 12px; font-size: 13px; display: flex; justify-content: space-between; }
 .calc-line b { color: var(--primary-dark); }
 .form-note { font-size: 11.5px; color: var(--text-3); }
@@ -285,6 +296,7 @@ tr.highlight-row { animation: rowflash 2.4s ease-out; }
 .fleet-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 6px 0; }
 .fleet-row .lbl { color: var(--text-2); }
 .fleet-row .val { font-weight: 600; text-align: right; }
+.fleet-foot { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
 
 /* charts */
 .chart-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; box-shadow: var(--shadow); }

@@ -326,5 +326,58 @@
     return data;
   };
 
+  /* frota: situação operacional do veículo (disponível/em_manutencao/bloqueado/inativo).
+     situacao_em/situacao_por são gravados por trigger no banco — nunca enviados pelo cliente. */
+  LIVE.atualizarSituacaoVeiculo = async function (placa, dados) {
+    const { data, error } = await window.sb.from("veiculos").update(dados).eq("placa", placa).select().single();
+    if (error) throw error;
+    return data;
+  };
+
+  /* manutenção: ordens de manutenção (fluxo de trabalho) — histórico de custo continua em "manutencoes" */
+  const SELECT_ORDEM = "*, veiculos(placa,tipo,situacao)";
+
+  LIVE.ordensManutencao = async function () {
+    const { data, error } = await window.sb
+      .from("ordens_manutencao").select(SELECT_ORDEM).order("aberta_em", { ascending: false });
+    if (error) throw error;
+    return data;
+  };
+
+  LIVE.criarOrdemManutencao = async function (dados) {
+    const { data, error } = await window.sb
+      .from("ordens_manutencao").insert(dados).select(SELECT_ORDEM).single();
+    if (error) throw error;
+    return data;
+  };
+
+  LIVE.atualizarOrdemManutencao = async function (id, dados) {
+    const { data, error } = await window.sb
+      .from("ordens_manutencao").update(dados).eq("id", id).select(SELECT_ORDEM).single();
+    if (error) throw error;
+    return data;
+  };
+
+  /* concluir ordem: transacional (rpc) — fecha a ordem, gera o custo em manutencoes,
+     e libera o veículo se pedido. patch_008_seguranca_motoristas_frota_manutencao.sql */
+  LIVE.concluirOrdemManutencao = async function (ordemId, dados) {
+    const { data, error } = await window.sb.rpc("concluir_ordem_manutencao", {
+      p_ordem_id: ordemId,
+      p_servico_realizado: dados.servico_realizado,
+      p_valor_pecas: dados.valor_pecas ?? null,
+      p_valor_mao_obra: dados.valor_mao_obra ?? null,
+      p_liberar_veiculo: !!dados.liberar_veiculo,
+    });
+    if (error) throw error;
+    return data;
+  };
+
+  /* histórico de manutenções (livro-caixa, já existia no banco antes de ter tela) */
+  LIVE.historicoManutencoes = async function () {
+    const { data, error } = await window.sb.from("manutencoes").select("*").order("data", { ascending: false });
+    if (error) throw error;
+    return data;
+  };
+
   window.LIVE = LIVE;
 })();

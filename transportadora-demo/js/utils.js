@@ -132,6 +132,32 @@
     return `<span class="tag tag-ok">${U.esc(t)}</span>`;
   };
 
+  /* situação operacional do veículo -> tag colorida (usado em Frota e Manutenções) */
+  const SITUACAO_VEICULO = {
+    disponivel:    { rotulo: "disponível",    cls: "tag-ok" },
+    em_manutencao: { rotulo: "em manutenção", cls: "tag-warn" },
+    bloqueado:     { rotulo: "bloqueado",     cls: "tag-danger" },
+    inativo:       { rotulo: "inativo",       cls: "tag-neutro" },
+  };
+  U.situacaoVeiculoInfo = s => SITUACAO_VEICULO[s] || { rotulo: s || "—", cls: "tag-neutro" };
+  U.tagSituacaoVeiculo = function (s) {
+    const info = U.situacaoVeiculoInfo(s);
+    return `<span class="tag ${info.cls}">${U.esc(info.rotulo)}</span>`;
+  };
+
+  /* disponibilidade do motorista -> tag colorida (usado em Motoristas) */
+  const DISPONIBILIDADE_MOTORISTA = {
+    disponivel: { rotulo: "disponível", cls: "tag-ok" },
+    em_viagem:  { rotulo: "em viagem",  cls: "tag-info" },
+    afastado:   { rotulo: "afastado",   cls: "tag-warn" },
+    inativo:    { rotulo: "inativo",    cls: "tag-neutro" },
+  };
+  U.disponibilidadeInfo = d => DISPONIBILIDADE_MOTORISTA[d] || { rotulo: d || "—", cls: "tag-neutro" };
+  U.tagDisponibilidade = function (d) {
+    const info = U.disponibilidadeInfo(d);
+    return `<span class="tag ${info.cls}">${U.esc(info.rotulo)}</span>`;
+  };
+
   U.mediaFrota = function (veiculos) {
     const ms = (veiculos || []).map(v => v.media_kml).filter(m => m);
     return ms.length ? ms.reduce((a, b) => a + b, 0) / ms.length : 0;

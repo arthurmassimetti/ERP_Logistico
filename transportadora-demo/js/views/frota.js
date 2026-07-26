@@ -26,6 +26,44 @@
     return '<span class="tag tag-ok">regular</span>';
   }
 
+  const SITUACOES_VEICULO = [
+    { v: "disponivel", r: "Disponível" }, { v: "em_manutencao", r: "Em manutenção" },
+    { v: "bloqueado", r: "Bloqueado" }, { v: "inativo", r: "Inativo" },
+  ];
+
+  function formSituacao(v) {
+    U.openDrawer({
+      titulo: `Situação — ${U.placaFmt(v.placa)}`,
+      sub: "Muda o que aparece no roteiro e nos alertas. Não mexe no cadastro do veículo.",
+      corpo: `
+      <div class="form-grid">
+        <div class="full"><label>Situação</label><select id="sf-situacao">
+          ${SITUACOES_VEICULO.map(s => `<option value="${s.v}" ${v.situacao === s.v ? "selected" : ""}>${s.r}</option>`).join("")}
+        </select></div>
+        <div class="full"><label>Motivo</label><input id="sf-motivo" value="${U.esc(v.situacao_motivo || "")}" placeholder="opcional"></div>
+      </div>`,
+      rodape: `
+        <button class="btn" id="sf-cancel">Cancelar</button>
+        <button class="btn btn-primary" id="sf-save">Salvar</button>`,
+    });
+    document.getElementById("sf-cancel").onclick = U.closeDrawer;
+    document.getElementById("sf-save").onclick = async () => {
+      const situacao = document.getElementById("sf-situacao").value;
+      const situacao_motivo = document.getElementById("sf-motivo").value.trim() || null;
+      const btn = document.getElementById("sf-save");
+      btn.disabled = true; btn.textContent = "Salvando…";
+      try {
+        await LIVE.atualizarSituacaoVeiculo(v.placa, { situacao, situacao_motivo });
+        U.closeDrawer();
+        U.toast("Situação atualizada.");
+        carregar();
+      } catch (e) {
+        U.toast("Erro ao salvar: " + (e.message || e));
+        btn.disabled = false; btn.textContent = "Salvar";
+      }
+    };
+  }
+
   function card(v, mf) {
     const oleo = oleoInfo(v);
     const consumoBad = v.media_kml && v.media_kml < mf * 0.95;
@@ -39,6 +77,8 @@
         ${statusGeral(v)}
       </div>
       <div class="fleet-rows">
+        <div class="fleet-row"><span class="lbl">Situação operacional</span><span class="val">${U.tagSituacaoVeiculo(v.situacao)}</span></div>
+        ${v.situacao_motivo ? `<div class="fleet-sub">${U.esc(v.situacao_motivo)}</div>` : ""}
         <div class="fleet-row"><span class="lbl">Km atual</span><span class="val">${v.km_atual ? U.num(v.km_atual) + " km" : "—"}</span></div>
         <div class="fleet-row"><span class="lbl">Próxima troca de óleo</span><span class="val">${v.km_troca ? U.num(v.km_troca) + " km" : "—"}</span></div>
         <div class="fleet-row"><span class="lbl">Situação do óleo</span><span class="val">${oleo.html}</span></div>
@@ -49,6 +89,10 @@
         <div class="fleet-row"><span class="lbl">Tacógrafo</span><span class="val">${U.vencTag(v.tacografo_venc, v.tacografo_obs)}</span></div>
         <div class="fleet-row"><span class="lbl">MCT</span><span class="val">${v.mct_numero ? U.esc(v.mct_numero) + (v.mct_status ? " · " + U.esc(v.mct_status) : "") : "—"}</span></div>
         <div class="fleet-row"><span class="lbl">ANTT</span><span class="val">${v.antt_empresa ? U.esc(v.antt_empresa) : "—"}${v.antt_numero ? " · " + U.esc(v.antt_numero) : ""}</span></div>
+      </div>
+      <div class="fleet-foot">
+        <button class="btn btn-sm" data-situacao="${v.placa}" type="button">Alterar situação</button>
+        <a class="btn btn-sm btn-ghost" href="#/manutencoes?placa=${v.placa}">Manutenções →</a>
       </div>
     </div>`;
   }
@@ -94,6 +138,12 @@
         <div class="kpi-value">${U.num(mf, 3)} km/l</div></div>`;
 
     grid.innerHTML = cavalos.map(v => card(v, mf)).join("") || '<div class="empty">Nenhum cavalo cadastrado.</div>';
+    grid.querySelectorAll("[data-situacao]").forEach(btn => {
+      btn.onclick = () => {
+        const v = state.veiculos.find(x => x.placa === btn.dataset.situacao);
+        if (v) formSituacao(v);
+      };
+    });
 
     carretasEl.innerHTML = `<table class="tbl" style="min-width:0">
       <thead><tr><th>Carreta</th><th>ANTT</th><th>Vinculada a</th></tr></thead>

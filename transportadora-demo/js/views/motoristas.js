@@ -31,6 +31,11 @@
   ];
   const rotuloPapel = p => (PAPEIS.find(x => x.v === p) || {}).r || p || "—";
 
+  const DISPONIBILIDADES = [
+    { v: "disponivel", r: "Disponível" }, { v: "em_viagem", r: "Em viagem" },
+    { v: "afastado", r: "Afastado" }, { v: "inativo", r: "Inativo" },
+  ];
+
   const state = { busca: "", mostrarInativos: false, dados: null, erro: null };
 
   function gerarSenha() {
@@ -82,12 +87,13 @@
         <td class="mono">${U.esc(m.cpf || "—")}</td>
         <td>${U.esc(m.telefone || "—")}</td>
         <td class="mono">${m.veiculos && m.veiculos[0] ? U.placaFmt(m.veiculos[0].placa) : "—"}</td>
+        <td>${U.tagDisponibilidade(m.disponibilidade)}</td>
         <td>${tagLogin(m)}</td>
         <td><button class="btn btn-sm btn-ghost">extrato →</button></td>
       </tr>`).join("");
     document.getElementById("mot-tbl").innerHTML = `
       <div class="table-wrap"><table class="tbl">
-        <thead><tr><th>Motorista</th><th>CPF</th><th>Telefone</th><th>Veículo</th><th>Login</th><th></th></tr></thead>
+        <thead><tr><th>Motorista</th><th>CPF</th><th>Telefone</th><th>Veículo</th><th>Disponibilidade</th><th>Login</th><th></th></tr></thead>
         <tbody>${rows}</tbody>
       </table></div>`;
     document.querySelectorAll("#mot-tbl tr.clickable").forEach(tr => {
@@ -107,7 +113,12 @@
         <div><label>CPF</label><input id="mform-cpf" value="${U.esc(g("cpf", "") || "")}" placeholder="000.000.000-00"></div>
         <div><label>RG</label><input id="mform-rg" value="${U.esc(g("rg", "") || "")}"></div>
         <div><label>CNH</label><input id="mform-cnh" value="${U.esc(g("cnh", "") || "")}"></div>
+        <div><label>Categoria da CNH</label><input id="mform-cnh-cat" value="${U.esc(g("cnh_categoria", "") || "")}" placeholder="ex: E"></div>
+        <div><label>Validade da CNH</label><input type="date" id="mform-cnh-val" value="${g("cnh_validade", "") || ""}"></div>
         <div><label>Telefone</label><input id="mform-tel" value="${U.esc(g("telefone", "") || "")}" placeholder="(11) 90000-0000"></div>
+        <div><label>Disponibilidade</label><select id="mform-disp">
+          ${DISPONIBILIDADES.map(d => `<option value="${d.v}" ${g("disponibilidade", "disponivel") === d.v ? "selected" : ""}>${d.r}</option>`).join("")}
+        </select></div>
         <div class="full form-note"><span class="req">*</span> campo obrigatório</div>
       </div>`,
       rodape: `
@@ -122,6 +133,9 @@
       const payload = {
         nome, cpf: val("mform-cpf") || null, rg: val("mform-rg") || null,
         cnh: val("mform-cnh") || null, telefone: val("mform-tel") || null,
+        cnh_categoria: val("mform-cnh-cat") || null,
+        cnh_validade: document.getElementById("mform-cnh-val").value || null,
+        disponibilidade: document.getElementById("mform-disp").value,
       };
       const btn = document.getElementById("mform-save");
       btn.disabled = true; btn.textContent = "Salvando…";
@@ -273,9 +287,13 @@
           <dl class="kv mt">
             <dt>CPF</dt><dd>${U.esc(m.cpf || "—")}</dd>
             <dt>RG</dt><dd>${U.esc(m.rg || "—")}</dd>
-            <dt>CNH</dt><dd>${U.esc(m.cnh || "—")}</dd>
+            <dt>CNH</dt><dd>${U.esc(m.cnh || "—")}${m.cnh_categoria ? " · categoria " + U.esc(m.cnh_categoria) : ""}</dd>
+            <dt>Validade da CNH</dt><dd>${m.cnh_validade ? U.vencTag(m.cnh_validade) : "—"}</dd>
             <dt>Telefone</dt><dd>${U.esc(m.telefone || "—")}</dd>
-            <dt>Veículo</dt><dd>${m.veiculos && m.veiculos[0] ? U.placaFmt(m.veiculos[0].placa) : "—"}</dd>
+            <dt>Veículo</dt><dd>${m.veiculos && m.veiculos[0] ? U.placaFmt(m.veiculos[0].placa) : '<span class="muted">sem veículo vinculado</span>'}</dd>
+            <dt>Disponibilidade</dt><dd><select id="md-disp" class="select-sm">
+              ${DISPONIBILIDADES.map(d => `<option value="${d.v}" ${(m.disponibilidade || "disponivel") === d.v ? "selected" : ""}>${d.r}</option>`).join("")}
+            </select></dd>
             <dt>Login</dt><dd>${perfil ? `criado · nível <b>${U.esc(rotuloPapel(perfil.papel))}</b>` : "sem login vinculado"}</dd>
           </dl>
           <div class="mt" style="display:flex;gap:8px;flex-wrap:wrap">
@@ -338,6 +356,17 @@
 
     document.getElementById("md-editar").onclick = () => formMotorista(m);
     document.getElementById("md-ativo").onclick = () => alternarAtivo(m);
+    document.getElementById("md-disp").onchange = async (e) => {
+      const nova = e.target.value;
+      try {
+        await LIVE.atualizarMotorista(m.id, { disponibilidade: nova });
+        m.disponibilidade = nova;
+        U.toast("Disponibilidade atualizada.");
+      } catch (err) {
+        e.target.value = m.disponibilidade || "disponivel";
+        U.toast("Erro ao atualizar disponibilidade: " + (err.message || err));
+      }
+    };
     document.getElementById("md-vale").onclick = () => formVale(m);
     const btnLogin = document.getElementById("md-login");
     if (btnLogin) btnLogin.onclick = () => formVincularLogin(m);
