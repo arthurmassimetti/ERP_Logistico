@@ -10,6 +10,18 @@ scripts/.env
 # backups do banco — contêm CPF e financeiro real
 backups/
 
+# planilhas de origem — contêm CPF, RG e pagamentos de motoristas reais,
+# além do financeiro da empresa. Este repositório é público: elas ficam
+# só na máquina (pasta fontes/) e nos backups. Ver fontes/LEIA-ME.md.
+fontes/
+*.xlsx
+*.xls
+*.csv
+
+# relatórios e análises com dados reais
+Analise_Comercial_*.pdf
+auditoria-*.html
+
 # backups locais em zip
 PhorteAguiar-backup-*.zip
 
