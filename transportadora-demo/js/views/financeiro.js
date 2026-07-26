@@ -29,7 +29,10 @@
       <div class="card card-pad">
         <div class="section-title" style="margin-top:0">Contas fixas mensais</div>
         <div id="fin-fixas-resumo"><div class="empty">Carregando…</div></div>
-        <div class="mt"><a class="btn btn-sm btn-primary" href="#/recorrentes">ver contas recorrentes →</a></div>
+        <div class="mt" style="display:flex;gap:8px;flex-wrap:wrap">
+          <a class="btn btn-sm btn-primary" href="#/recorrentes">fixas da empresa →</a>
+          <a class="btn btn-sm" href="#/recorrentes-pessoal">fixas pessoais →</a>
+        </div>
       </div>
       <div class="card card-pad">
         <div class="section-title" style="margin-top:0">Contas a receber</div>
@@ -66,9 +69,16 @@
 
   function fixasResumo() {
     const ativas = state.fixas.filter(f => f.ativa);
+    const emp = ativas.filter(f => f.origem === "empresa");
+    const pes = ativas.filter(f => f.origem === "pessoal");
+    /* separado por origem: custo da operação e retirada pessoal do sócio não
+       são a mesma coisa, e o total somado esconde essa diferença */
     document.getElementById("fin-fixas-resumo").innerHTML = `
-      <div class="fleet-row"><span class="lbl">Contas ativas</span><span class="val">${ativas.length}</span></div>
-      <div class="fleet-row"><span class="lbl">Total por mês</span><span class="val">${U.money(U.sum(ativas, f => f.valor))}</span></div>`;
+      <div class="fleet-row"><span class="lbl">Empresa <span class="muted">(${emp.length})</span></span>
+        <span class="val">${U.money(U.sum(emp, f => f.valor))}</span></div>
+      <div class="fleet-row"><span class="lbl">Pessoal <span class="muted">(${pes.length})</span></span>
+        <span class="val">${U.money(U.sum(pes, f => f.valor))}</span></div>
+      <div class="calc-line mt"><span>Total por mês</span><b>${U.money(U.sum(ativas, f => f.valor))}</b></div>`;
   }
 
   function abrirEditarSaldos() {
