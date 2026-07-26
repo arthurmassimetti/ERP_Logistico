@@ -1,0 +1,42 @@
+name: Publicar no GitHub Pages
+
+# Publica SOMENTE a pasta transportadora-demo/ (o app em si).
+# As planilhas em fontes/, os backups e os scripts NAO vao para o site —
+# o artefato do Pages leva apenas o que esta em "path" abaixo.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:      # permite publicar manualmente pela aba Actions
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# uma publicacao por vez; nao cancela a que ja esta rodando
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  publicar:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - name: Baixar o repositorio
+        uses: actions/checkout@v4
+
+      - name: Preparar o Pages
+        uses: actions/configure-pages@v5
+
+      - name: Empacotar só o app
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: transportadora-demo
+
+      - name: Publicar
+        id: deploy
+        uses: actions/deploy-pages@v4
