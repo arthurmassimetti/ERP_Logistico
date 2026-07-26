@@ -7,6 +7,7 @@
     { id: "operacao-grupo", rotulo: "Operação", icone: "truck", itens: [
       { id: "roteiro", rotulo: "Roteiro diário" },
       { id: "fretes", rotulo: "Fretes" },
+      { id: "piso", rotulo: "Piso mínimo ANTT" },
       { id: "categorias", rotulo: "Categoria de carga" },
       { id: "relatorios", rotulo: "Relatório de operação" },
     ] },
