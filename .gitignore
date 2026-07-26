@@ -10,3 +10,6 @@ scripts/__pycache__/
 
 # backups locais (ficam fora do repo, não fazem sentido versionados)
 PhorteAguiar-backup-*.zip
+
+# backups do banco — contêm dados reais (CPF, financeiro), nunca versionar
+backups/

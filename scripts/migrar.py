@@ -2,18 +2,28 @@
 Migração das planilhas -> Supabase.
 
 Fontes (o melhor de cada uma):
-  - transportadora-demo/js/data.js  -> motoristas, veiculos, fretes, roteiro,
-                                       contas_fixas, contas_pagar, saldos_banco, vales
-                                       (extração já limpa e validada das planilhas)
-  - POSTO 2026.xlsx                 -> abastecimentos (atualizado depois da demo)
-  - FROTA e MANUTENÇOES.xlsx        -> documentos dos veículos + manutencoes
+  - fontes_planilhas.py       -> motoristas, veiculos, fretes, roteiro,
+                                 contas_fixas, contas_pagar, saldos_banco
+                                 (lê direto das planilhas originais)
+  - POSTO 2026.xlsx           -> abastecimentos
+  - FROTA e MANUTENÇOES.xlsx  -> documentos dos veículos + manutencoes
+
+Antes lia de `transportadora-demo/js/data.js`, que era uma cópia estática das
+planilhas. Esse arquivo foi apagado em 24/07/2026, quando o sistema passou a
+viver só no Supabase — e a migração ficou impossível de repetir. Agora lê das
+planilhas de verdade, então dá para rodar de novo do zero, inclusive em um
+projeto de teste.
 
 Uso:
   python migrar.py --dry-run     # só analisa e mostra o que faria (não grava nada)
   python migrar.py               # insere no Supabase (pula tabelas que já têm dados)
   python migrar.py --recarregar  # apaga o que existe e insere tudo de novo
+
+ATENÇÃO com --recarregar: ele apaga as tabelas antes de inserir, então também
+leva embora tudo o que foi criado pelo sistema depois da migração (checklists,
+ocorrências, ordens de manutenção, vales lançados pela tela). Rode
+backup_banco.py antes.
 """
-import json
 import re
 import sys
 from datetime import date, datetime
@@ -22,9 +32,12 @@ from pathlib import Path
 import openpyxl
 
 PASTA = Path(__file__).resolve().parent.parent          # ...\PhorteAguiar
-DATA_JS = PASTA / "transportadora-demo" / "js" / "data.js"
-XLSX_POSTO = PASTA / "POSTO 2026.xlsx"
-XLSX_FROTA = PASTA / "FROTA e MANUTENÇOES.xlsx"
+
+# caminhos vêm de fontes_planilhas para não divergirem (pasta fontes/ é a
+# fonte de verdade; ver fontes/LEIA-ME.md)
+from fontes_planilhas import _fonte, XLSX_POSTO
+
+XLSX_FROTA = _fonte("FROTA e MANUTENÇOES.xlsx")
 
 HOJE = date.today().isoformat()
 
@@ -75,13 +88,9 @@ def txt(v):
 
 
 # ----------------------------------------------------------------------------
-# 1) data.js
+# 1) planilhas originais (antes: data.js)
 # ----------------------------------------------------------------------------
-def carregar_datajs():
-    bruto = DATA_JS.read_text(encoding="utf-8")
-    inicio = bruto.index("{")
-    fim = bruto.rindex("}")
-    return json.loads(bruto[inicio:fim + 1])
+from fontes_planilhas import carregar_planilhas
 
 
 def montar_motoristas(db):
@@ -407,7 +416,7 @@ def ler_posto(mapa_motorista_veiculo):
 # execução
 # ----------------------------------------------------------------------------
 def preparar_tudo():
-    db = carregar_datajs()
+    db = carregar_planilhas()
     docs_frota, manutencoes, carretas_info = ler_frota()
     carretas, cavalos = montar_veiculos(db, docs_frota, carretas_info)
     mapa_mot_veic = {m["nome"]: placa_norm(m.get("veiculo")) for m in db["motoristas"]}
@@ -523,7 +532,9 @@ def main():
     dry = "--dry-run" in sys.argv
     recarregar = "--recarregar" in sys.argv
 
-    for arquivo in (DATA_JS, XLSX_POSTO, XLSX_FROTA):
+    from fontes_planilhas import PASTA_MOTORISTAS, XLSX_MOVIMENTACAO, XLSX_CONTAS_FIXAS
+    for arquivo in (XLSX_POSTO, XLSX_FROTA, XLSX_MOVIMENTACAO,
+                    XLSX_CONTAS_FIXAS, PASTA_MOTORISTAS):
         if not arquivo.exists():
             sys.exit(f"Arquivo não encontrado: {arquivo}")
 
