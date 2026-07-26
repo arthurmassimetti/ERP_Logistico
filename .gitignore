@@ -1,0 +1,12 @@
+# segredos — nunca versionar
+.env
+scripts/.env
+**/.env
+
+# runtime / cache
+scripts/__pycache__/
+**/__pycache__/
+*.pyc
+
+# backups locais (ficam fora do repo, não fazem sentido versionados)
+PhorteAguiar-backup-*.zip

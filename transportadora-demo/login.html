@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Phorte Aguiar — Entrar</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🚚</text></svg>">
+<link rel="stylesheet" href="css/styles.css?v=27">
+</head>
+<body class="login-body">
+
+<main class="login-wrap">
+  <form class="login-card" id="form-login" novalidate>
+    <div class="login-brand">
+      <div class="brand-logo">PA</div>
+      <div>
+        <div class="login-name">Phorte Aguiar</div>
+        <div class="login-sub">painel de gestão de logística</div>
+      </div>
+    </div>
+
+    <div>
+      <h1 class="login-title">Entrar no painel</h1>
+      <p class="login-hint">Use o e-mail e a senha cadastrados pelo administrador.</p>
+    </div>
+
+    <div class="login-field">
+      <label for="email">E-mail<span class="req">*</span></label>
+      <input id="email" type="email" autocomplete="username" required
+             placeholder="voce@phorteaguiar.com.br">
+    </div>
+
+    <div class="login-field">
+      <label for="senha">Senha<span class="req">*</span></label>
+      <div class="login-senha">
+        <input id="senha" type="password" autocomplete="current-password" required placeholder="••••••••••">
+        <button type="button" id="btn-ver" tabindex="-1">mostrar</button>
+      </div>
+    </div>
+
+    <div class="login-erro" id="login-erro" hidden></div>
+
+    <button class="btn btn-primary login-btn" id="btn-entrar" type="submit">Entrar</button>
+
+    <div class="login-foot">Acesso restrito. Problemas para entrar? Fale com o administrador.</div>
+  </form>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="js/supabase-config.js?v=27"></script>
+<script src="js/login.js?v=27"></script>
+</body>
+</html>

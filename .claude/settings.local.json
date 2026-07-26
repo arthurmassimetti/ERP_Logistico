@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -c ' *)",
+      "Skill(artifact-design)",
+      "Skill(artifact-design:*)",
+      "Bash(python \"C:\\\\Users\\\\ESTRAT~1\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users-Estrategia-Desktop-PhorteAguiar\\\\8d9956e4-dab6-423b-862d-f7eda6696d16\\\\scratchpad\\\\check_counts.py\")"
+    ]
+  }
+}

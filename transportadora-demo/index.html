@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Phorte Aguiar — Painel de Gestão</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🚚</text></svg>">
+<link rel="stylesheet" href="css/styles.css?v=27">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="js/supabase-config.js?v=27"></script>
+<script src="js/auth.js?v=27"></script>
+</head>
+<body>
+<div class="app">
+
+  <aside class="sidebar" id="sidebar">
+    <div class="brand">
+      <div class="brand-logo">PA</div>
+      <div>
+        <div class="brand-name">Phorte Aguiar</div>
+        <div class="brand-sub">painel de gestão de logística</div>
+      </div>
+    </div>
+    <nav class="nav" id="nav"></nav>
+    <div class="sidebar-foot">
+      <div id="user-box" class="user-box"></div>
+      <div class="foot-line">Dados ao vivo — Supabase</div>
+    </div>
+  </aside>
+
+  <div class="backdrop" id="backdrop"></div>
+
+  <main class="main">
+    <header class="topbar">
+      <button class="hamburger" id="hamburger" aria-label="Abrir menu">
+        <span></span><span></span><span></span>
+      </button>
+      <div class="topbar-title">
+        <h1 id="page-title">Visão geral</h1>
+        <div class="topbar-sub" id="page-sub"></div>
+      </div>
+      <div class="topbar-right">
+        <button class="btn-alert-count" id="btn-alertas" title="Central de alertas"></button>
+      </div>
+    </header>
+    <div class="content" id="content"></div>
+  </main>
+
+</div>
+
+<div class="modal-wrap" id="modal-wrap" hidden>
+  <div class="modal-back" id="modal-back"></div>
+  <div class="modal" id="modal" role="dialog" aria-modal="true"></div>
+</div>
+
+<div class="drawer-wrap" id="drawer-wrap" hidden>
+  <div class="drawer-back" id="drawer-back"></div>
+  <aside class="drawer" id="drawer" role="dialog" aria-modal="true"></aside>
+</div>
+
+<script src="js/utils.js?v=27"></script><script src="js/alerts.js?v=27"></script>
+<script src="js/data-live.js?v=27"></script>
+<script src="js/views/dashboard.js?v=27"></script><script src="js/views/resultado.js?v=27"></script>
+<script src="js/views/fretes.js?v=27"></script>
+<script src="js/views/categorias.js?v=27"></script>
+<script src="js/views/roteiro.js?v=27"></script>
+<script src="js/views/painelfinanceiro.js?v=27"></script>
+<script src="js/views/financeiro.js?v=27"></script>
+<script src="js/views/recorrentes.js?v=27"></script>
+<script src="js/views/receber.js?v=27"></script>
+<script src="js/views/frota.js?v=27"></script>
+<script src="js/views/motoristas.js?v=27"></script>
+<script src="js/views/relatorios.js?v=27"></script>
+<script src="js/app.js?v=27"></script>
+</body>
+</html>

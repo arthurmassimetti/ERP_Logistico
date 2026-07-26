@@ -1,0 +1,330 @@
+/* Camada de dados vivos — fala direto com o Supabase (window.sb, criado em auth.js).
+   Todas as telas usam LIVE.* — não existe mais dado estático (data.js foi removido). */
+(function () {
+  const LIVE = {};
+
+  let cacheMotoristas = null;
+  let cacheVeiculos = null;
+
+  LIVE.motoristas = async function (forcar) {
+    if (cacheMotoristas && !forcar) return cacheMotoristas;
+    const { data, error } = await window.sb
+      .from("motoristas")
+      .select("id,nome,ativo")
+      .eq("ativo", true)
+      .order("nome");
+    if (error) throw error;
+    cacheMotoristas = data;
+    return data;
+  };
+
+  LIVE.veiculos = async function (forcar) {
+    if (cacheVeiculos && !forcar) return cacheVeiculos;
+    const { data, error } = await window.sb
+      .from("veiculos")
+      .select("placa,tipo,motorista_id")
+      .eq("ativo", true)
+      .order("placa");
+    if (error) throw error;
+    cacheVeiculos = data;
+    return data;
+  };
+
+  /* frota completa (cavalos + carretas, tipo diferencia) — usado na tela Frota e nos alertas de óleo/tacógrafo/consumo */
+  LIVE.frota = async function () {
+    const { data, error } = await window.sb
+      .from("veiculos")
+      .select("*, motoristas(nome)")
+      .eq("ativo", true)
+      .order("tipo")
+      .order("placa");
+    if (error) throw error;
+    return data;
+  };
+
+  /* vales em aberto de todos os motoristas (saldo > 0) — usado no motor de alertas */
+  LIVE.vales = async function () {
+    const { data, error } = await window.sb
+      .from("vales")
+      .select("*, motoristas(nome)")
+      .gt("saldo", 0)
+      .order("data", { ascending: false });
+    if (error) throw error;
+    return data;
+  };
+
+  const SELECT_FRETE = "*, motoristas(nome), veiculos(placa), categorias_carga(nome)";
+
+  LIVE.fretes = async function () {
+    const { data, error } = await window.sb
+      .from("fretes")
+      .select(SELECT_FRETE)
+      .order("data", { ascending: false });
+    if (error) throw error;
+    return data;
+  };
+
+  LIVE.criarFrete = async function (dados) {
+    const { data, error } = await window.sb
+      .from("fretes")
+      .insert(dados)
+      .select(SELECT_FRETE)
+      .single();
+    if (error) throw error;
+    return data;
+  };
+
+  LIVE.atualizarFrete = async function (id, dados) {
+    const { data, error } = await window.sb
+      .from("fretes")
+      .update(dados)
+      .eq("id", id)
+      .select(SELECT_FRETE)
+      .single();
+    if (error) throw error;
+    return data;
+  };
+
+  /* categorias de carga (lookup) — usado no form de fretes: só as ativas */
+  LIVE.categoriasCarga = async function () {
+    const { data, error } = await window.sb
+      .from("categorias_carga")
+      .select("*")
+      .eq("ativa", true)
+      .order("nome");
+    if (error) throw error;
+    return data;
+  };
+
+  /* tela de gestão de categorias: ativas + inativas, pra poder reativar */
+  LIVE.todasCategoriasCarga = async function () {
+    const { data, error } = await window.sb.from("categorias_carga").select("*").order("nome");
+    if (error) throw error;
+    return data;
+  };
+
+  LIVE.criarCategoriaCarga = async function (dados) {
+    const { data, error } = await window.sb.from("categorias_carga").insert(dados).select().single();
+    if (error) throw error;
+    return data;
+  };
+
+  LIVE.atualizarCategoriaCarga = async function (id, dados) {
+    const { data, error } = await window.sb.from("categorias_carga").update(dados).eq("id", id).select().single();
+    if (error) throw error;
+    return data;
+  };
+
+  /* roteiro: busca uma janela de dias (padrão: de 3 dias atrás até 14 dias à frente) */
+  LIVE.roteiro = async function (deISO, ateISO) {
+    let q = window.sb.from("roteiro").select("*, motoristas(nome)").order("data");
+    if (deISO) q = q.gte("data", deISO);
+    if (ateISO) q = q.lte("data", ateISO);
+    const { data, error } = await q;
+    if (error) throw error;
+    return data;
+  };
+
+  LIVE.criarRoteiro = async function (dados) {
+    const { data, error } = await window.sb
+      .from("roteiro").insert(dados).select("*, motoristas(nome)").single();
+    if (error) throw error;
+    return data;
+  };
+
+  LIVE.atualizarRoteiro = async function (id, dados) {
+    const { data, error } = await window.sb
+      .from("roteiro").update(dados).eq("id", id).select("*, motoristas(nome)").single();
+    if (error) throw error;
+    return data;
+  };
+
+  /* motoristas — tela de gestão (ativos e inativos, com veículo e login vinculados) */
+  LIVE.todosMotoristas = async function () {
+    const { data, error } = await window.sb
+      .from("motoristas")
+      .select("*, veiculos(placa), perfis(user_id,papel)")
+      .order("nome");
+    if (error) throw error;
+    return data;
+  };
+
+  LIVE.motoristaPorId = async function (id) {
+    const { data, error } = await window.sb
+      .from("motoristas").select("*, veiculos(placa), perfis(user_id,papel)").eq("id", id).single();
+    if (error) throw error;
+    return data;
+  };
+
+  LIVE.criarMotorista = async function (dados) {
+    const { data, error } = await window.sb.from("motoristas").insert(dados).select().single();
+    if (error) throw error;
+    return data;
+  };
+
+  LIVE.atualizarMotorista = async function (id, dados) {
+    const { data, error } = await window.sb.from("motoristas").update(dados).eq("id", id).select().single();
+    if (error) throw error;
+    return data;
+  };
+
+  LIVE.fretesPorMotorista = async function (motoristaId) {
+    const { data, error } = await window.sb
+      .from("fretes").select("*, veiculos(placa)")
+      .eq("motorista_id", motoristaId).order("data", { ascending: false });
+    if (error) throw error;
+    return data;
+  };
+
+  LIVE.valesPorMotorista = async function (motoristaId) {
+    const { data, error } = await window.sb
+      .from("vales").select("*").eq("motorista_id", motoristaId).order("data", { ascending: false });
+    if (error) throw error;
+    return data;
+  };
+
+  LIVE.criarVale = async function (dados) {
+    const { data, error } = await window.sb.from("vales").insert(dados).select().single();
+    if (error) throw error;
+    return data;
+  };
+
+  /* portal do motorista: RLS já garante que só vêm as linhas do próprio motorista logado */
+  LIVE.meusFretes = async function (limite) {
+    const { data, error } = await window.sb
+      .from("vw_fretes_motorista").select("*").order("data", { ascending: false }).limit(limite || 30);
+    if (error) throw error;
+    return data;
+  };
+
+  LIVE.meusVales = async function () {
+    const { data, error } = await window.sb.from("vales").select("*").order("data", { ascending: false });
+    if (error) throw error;
+    return data;
+  };
+
+  /* cria login + perfil via Edge Function (precisa da chave secreta, por isso não roda no navegador puro).
+     A função foi deployada no Supabase com o nome "dynamic-processor" (nome sugerido pelo dashboard
+     na hora do deploy) — o código dela é o de supabase/functions/admin-usuarios/index.ts. */
+  LIVE.criarUsuario = async function (dados) {
+    const { data, error } = await window.sb.functions.invoke("dynamic-processor", { body: dados });
+    if (error) {
+      let msg = error.message || String(error);
+      if (error.context && typeof error.context.json === "function") {
+        try { const corpo = await error.context.json(); if (corpo && corpo.error) msg = corpo.error; } catch (_) {}
+      }
+      throw new Error(msg);
+    }
+    if (data && data.error) throw new Error(data.error);
+    return data;
+  };
+
+  /* financeiro: contas a pagar avulsas — cacheado (igual motoristas/veiculos); toda escrita invalida */
+  let cacheContasPagar = null;
+
+  LIVE.contasPagar = async function (forcar) {
+    if (cacheContasPagar && !forcar) return cacheContasPagar;
+    const { data, error } = await window.sb.from("contas_pagar").select("*").order("vencimento");
+    if (error) throw error;
+    cacheContasPagar = data;
+    return data;
+  };
+
+  LIVE.criarContaPagar = async function (dados) {
+    const { data, error } = await window.sb.from("contas_pagar").insert(dados).select().single();
+    if (error) throw error;
+    cacheContasPagar = null;
+    return data;
+  };
+
+  LIVE.atualizarContaPagar = async function (id, dados) {
+    const { data, error } = await window.sb.from("contas_pagar").update(dados).eq("id", id).select().single();
+    if (error) throw error;
+    cacheContasPagar = null;
+    return data;
+  };
+
+  /* financeiro: contas fixas mensais (RLS já entrega só empresa pro papel financeiro; admin vê tudo) — cacheado */
+  let cacheContasFixas = null;
+
+  LIVE.contasFixas = async function (forcar) {
+    if (cacheContasFixas && !forcar) return cacheContasFixas;
+    const { data, error } = await window.sb.from("contas_fixas").select("*").order("dia_venc");
+    if (error) throw error;
+    cacheContasFixas = data;
+    return data;
+  };
+
+  LIVE.criarContaFixa = async function (dados) {
+    const { data, error } = await window.sb.from("contas_fixas").insert(dados).select().single();
+    if (error) throw error;
+    cacheContasFixas = null;
+    return data;
+  };
+
+  LIVE.atualizarContaFixa = async function (id, dados) {
+    const { data, error } = await window.sb.from("contas_fixas").update(dados).eq("id", id).select().single();
+    if (error) throw error;
+    cacheContasFixas = null;
+    return data;
+  };
+
+  /* financeiro: saldo por conta bancária (número único, atualizado à mão) */
+  LIVE.saldosBanco = async function () {
+    const { data, error } = await window.sb.from("saldos_banco").select("*").order("banco");
+    if (error) throw error;
+    return data;
+  };
+
+  LIVE.atualizarSaldoBanco = async function (id, saldo) {
+    const { data, error } = await window.sb.from("saldos_banco")
+      .update({ saldo, atualizado_em: new Date().toISOString() }).eq("id", id).select().single();
+    if (error) throw error;
+    return data;
+  };
+
+  /* financeiro: contas a receber = view automática a partir do saldo pendente de cada frete */
+  LIVE.contasReceber = async function () {
+    const { data, error } = await window.sb
+      .from("vw_contas_receber").select("*")
+      .order("pagamento_previsto", { ascending: true, nullsFirst: false });
+    if (error) throw error;
+    return data;
+  };
+
+  /* fretes recebidos dentro de um mês (para o KPI "recebido no mês" de Contas a Receber) */
+  LIVE.recebidosNoMes = async function (mesISO) {
+    const [y, m] = mesISO.split("-").map(Number);
+    const de = `${mesISO}-01`;
+    const proxY = m === 12 ? y + 1 : y, proxM = m === 12 ? 1 : m + 1;
+    const ate = `${proxY}-${String(proxM).padStart(2, "0")}-01`;
+    const { data, error } = await window.sb
+      .from("fretes").select("id,transportadora,valor_frete,adiantamento,saldo,pagamento_realizado")
+      .gte("pagamento_realizado", de).lt("pagamento_realizado", ate);
+    if (error) throw error;
+    return data;
+  };
+
+  /* confirma recebimento (total ou parcial) direto da tela de Contas a Receber — via RPC porque o
+     papel financeiro só tem leitura na tabela fretes; a função só mexe em adiantamento/saldo/pagamento_realizado
+     (patch_005_recebimento_financeiro.sql precisa estar rodado no Supabase) */
+  LIVE.registrarRecebimentoFrete = async function (freteId, dados) {
+    const { data, error } = await window.sb.rpc("registrar_recebimento_frete", {
+      p_frete_id: freteId,
+      p_adiantamento: dados.adiantamento ?? null,
+      p_saldo: dados.saldo ?? null,
+      p_pagamento_realizado: dados.pagamento_realizado ?? null,
+    });
+    if (error) throw error;
+    return data;
+  };
+
+  /* vencimentos: contas fixas expandidas por mês + avulsas em aberto, dentro do horizonte (dias) */
+  LIVE.vencimentos = async function (horizonte) {
+    const { data, error } = await window.sb.rpc("gerar_vencimentos", { horizonte: horizonte || 45 });
+    if (error) throw error;
+    return data;
+  };
+
+  window.LIVE = LIVE;
+})();
