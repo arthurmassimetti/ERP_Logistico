@@ -257,15 +257,17 @@
 
   async function bindDetalhe(id) {
     const alvo = document.getElementById("mot-detalhe");
-    let m, fretes, vales;
+    let m, fretes, vales, frota;
     try {
-      [m, fretes, vales] = await Promise.all([
-        LIVE.motoristaPorId(id), LIVE.fretesPorMotorista(id), LIVE.valesPorMotorista(id),
+      [m, fretes, vales, frota] = await Promise.all([
+        LIVE.motoristaPorId(id), LIVE.fretesPorMotorista(id), LIVE.valesPorMotorista(id), LIVE.frota(),
       ]);
     } catch (e) {
       alvo.innerHTML = `<div class="empty">Não foi possível carregar este motorista: ${U.esc(e.message || e)}</div>`;
       return;
     }
+    const cavalos = frota.filter(v => v.tipo === "cavalo");
+    const veiculoAtual = m.veiculos && m.veiculos[0] ? m.veiculos[0].placa : "";
     document.getElementById("page-title").textContent = m.nome;
 
     const stats = {
@@ -290,7 +292,13 @@
             <dt>CNH</dt><dd>${U.esc(m.cnh || "—")}${m.cnh_categoria ? " · categoria " + U.esc(m.cnh_categoria) : ""}</dd>
             <dt>Validade da CNH</dt><dd>${m.cnh_validade ? U.vencTag(m.cnh_validade) : "—"}</dd>
             <dt>Telefone</dt><dd>${U.esc(m.telefone || "—")}</dd>
-            <dt>Veículo</dt><dd>${m.veiculos && m.veiculos[0] ? U.placaFmt(m.veiculos[0].placa) : '<span class="muted">sem veículo vinculado</span>'}</dd>
+            <dt>Veículo vinculado</dt><dd><select id="md-veiculo" class="select-sm">
+              <option value="">sem veículo</option>
+              ${cavalos.map(v => {
+                const ocupado = v.motorista_id && v.motorista_id !== m.id && v.motoristas ? ` (com ${v.motoristas.nome})` : "";
+                return `<option value="${v.placa}" ${veiculoAtual === v.placa ? "selected" : ""}>${U.placaFmt(v.placa)}${U.esc(ocupado)}</option>`;
+              }).join("")}
+            </select></dd>
             <dt>Disponibilidade</dt><dd><select id="md-disp" class="select-sm">
               ${DISPONIBILIDADES.map(d => `<option value="${d.v}" ${(m.disponibilidade || "disponivel") === d.v ? "selected" : ""}>${d.r}</option>`).join("")}
             </select></dd>
@@ -365,6 +373,19 @@
       } catch (err) {
         e.target.value = m.disponibilidade || "disponivel";
         U.toast("Erro ao atualizar disponibilidade: " + (err.message || err));
+      }
+    };
+    document.getElementById("md-veiculo").onchange = async (e) => {
+      const novaPlaca = e.target.value || null;
+      e.target.disabled = true;
+      try {
+        await LIVE.atribuirVeiculoAoMotorista(m.id, novaPlaca);
+        U.toast(novaPlaca ? "Veículo vinculado." : "Motorista ficou sem veículo.");
+        bindDetalhe(id);
+      } catch (err) {
+        U.toast("Erro ao vincular veículo: " + (err.message || err));
+        e.target.disabled = false;
+        e.target.value = veiculoAtual;
       }
     };
     document.getElementById("md-vale").onclick = () => formVale(m);

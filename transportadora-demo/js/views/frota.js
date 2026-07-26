@@ -2,7 +2,7 @@
 (function () {
   const U = window.U;
 
-  const state = { veiculos: [], erro: null, scrollPara: null };
+  const state = { veiculos: [], motoristas: [], erro: null, scrollPara: null };
 
   function oleoInfo(v) {
     if (!v.km_atual || !v.km_troca) return { html: '<span class="muted">sem registro</span>', cls: "" };
@@ -64,6 +64,113 @@
     };
   }
 
+  /* --------------------------------------------------- criar / editar veículo */
+  function opcoesCarreta(existente, tipoSelecionado) {
+    if (tipoSelecionado !== "cavalo") return "";
+    const carretas = state.veiculos.filter(v => v.tipo === "carreta" && (!existente || v.placa !== existente.placa));
+    const atual = existente ? existente.carreta_placa : null;
+    return `
+    <div><label>Carreta vinculada</label><select id="vf-carreta">
+      <option value="">nenhuma</option>
+      ${carretas.map(c => `<option value="${c.placa}" ${atual === c.placa ? "selected" : ""}>${U.placaFmt(c.placa)}</option>`).join("")}
+    </select></div>`;
+  }
+
+  function opcoesMotorista(existente, tipoSelecionado) {
+    if (tipoSelecionado !== "cavalo") return "";
+    const atualId = existente ? existente.motorista_id : null;
+    return `
+    <div><label>Motorista vinculado</label><select id="vf-motorista">
+      <option value="">sem motorista</option>
+      ${state.motoristas.map(m => {
+        const outro = state.veiculos.find(v => v.motorista_id === m.id && (!existente || v.placa !== existente.placa));
+        const nota = outro ? ` (hoje em ${U.placaFmt(outro.placa)})` : "";
+        return `<option value="${m.id}" ${atualId === m.id ? "selected" : ""}>${U.esc(m.nome)}${nota}</option>`;
+      }).join("")}
+    </select></div>`;
+  }
+
+  function formVeiculo(existente) {
+    const ed = !!existente;
+    const g = (c, d) => ed ? (existente[c] ?? d) : d;
+    const tipoAtual = g("tipo", "cavalo");
+
+    U.openDrawer({
+      titulo: ed ? `Editar veículo — ${U.placaFmt(existente.placa)}` : "Novo veículo",
+      sub: ed ? "Placa e tipo não podem ser alterados depois de criado." : "",
+      corpo: `
+      <div class="form-grid">
+        <div><label>Placa<span class="req">*</span></label><input id="vf-placa" ${ed ? "disabled" : ""} value="${U.esc((g("placa", "") || "").toUpperCase())}" placeholder="ABC1D23" style="text-transform:uppercase"></div>
+        <div><label>Tipo<span class="req">*</span></label><select id="vf-tipo" ${ed ? "disabled" : ""}>
+          <option value="cavalo" ${tipoAtual === "cavalo" ? "selected" : ""}>Cavalo</option>
+          <option value="carreta" ${tipoAtual === "carreta" ? "selected" : ""}>Carreta</option>
+        </select></div>
+        <div><label>Modelo</label><input id="vf-modelo" value="${U.esc(g("modelo", "") || "")}"></div>
+        <div><label>Ano/modelo</label><input id="vf-ano" value="${U.esc(g("ano_modelo", "") || "")}"></div>
+        <div><label>Cor</label><input id="vf-cor" value="${U.esc(g("cor", "") || "")}"></div>
+        <div><label>Km atual</label><input type="number" id="vf-km-atual" min="0" value="${g("km_atual", "") ?? ""}"></div>
+        <div><label>Km da próxima troca de óleo</label><input type="number" id="vf-km-troca" min="0" value="${g("km_troca", "") ?? ""}"></div>
+        <div><label>Vencimento do tacógrafo</label><input type="date" id="vf-taco-venc" value="${g("tacografo_venc", "") || ""}"></div>
+        <div><label>Observação do tacógrafo</label><input id="vf-taco-obs" value="${U.esc(g("tacografo_obs", "") || "")}"></div>
+        <div><label>Número MCT</label><input id="vf-mct-num" value="${U.esc(g("mct_numero", "") || "")}"></div>
+        <div><label>Status MCT</label><input id="vf-mct-status" value="${U.esc(g("mct_status", "") || "")}"></div>
+        <div><label>Empresa ANTT</label><input id="vf-antt-empresa" value="${U.esc(g("antt_empresa", "") || "")}"></div>
+        <div><label>Número ANTT</label><input id="vf-antt-numero" value="${U.esc(g("antt_numero", "") || "")}"></div>
+        <div id="vf-campo-carreta">${opcoesCarreta(existente, tipoAtual)}</div>
+        <div id="vf-campo-motorista">${opcoesMotorista(existente, tipoAtual)}</div>
+        <div class="full form-note"><span class="req">*</span> campo obrigatório</div>
+      </div>`,
+      rodape: `
+        <button class="btn" id="vf-cancel">Cancelar</button>
+        <button class="btn btn-primary" id="vf-save">${ed ? "Salvar alterações" : "Cadastrar veículo"}</button>`,
+    });
+
+    if (!ed) {
+      document.getElementById("vf-tipo").onchange = e => {
+        document.getElementById("vf-campo-carreta").innerHTML = opcoesCarreta(null, e.target.value);
+        document.getElementById("vf-campo-motorista").innerHTML = opcoesMotorista(null, e.target.value);
+      };
+    }
+
+    document.getElementById("vf-cancel").onclick = U.closeDrawer;
+    document.getElementById("vf-save").onclick = async () => {
+      const placa = document.getElementById("vf-placa").value.trim().toUpperCase();
+      const tipo = document.getElementById("vf-tipo").value;
+      if (!ed && !placa) { U.toast("Informe a placa."); return; }
+
+      const numOrNull = id => { const val = document.getElementById(id).value; return val === "" ? null : parseInt(val, 10); };
+      const strOrNull = id => document.getElementById(id).value.trim() || null;
+      const elCarreta = document.getElementById("vf-carreta");
+      const elMotorista = document.getElementById("vf-motorista");
+      const motoristaEscolhido = elMotorista ? (elMotorista.value || null) : null;
+
+      const payload = {
+        modelo: strOrNull("vf-modelo"), ano_modelo: strOrNull("vf-ano"), cor: strOrNull("vf-cor"),
+        km_atual: numOrNull("vf-km-atual"), km_troca: numOrNull("vf-km-troca"),
+        tacografo_venc: document.getElementById("vf-taco-venc").value || null,
+        tacografo_obs: strOrNull("vf-taco-obs"),
+        mct_numero: strOrNull("vf-mct-num"), mct_status: strOrNull("vf-mct-status"),
+        antt_empresa: strOrNull("vf-antt-empresa"), antt_numero: strOrNull("vf-antt-numero"),
+        carreta_placa: elCarreta ? (elCarreta.value || null) : null,
+      };
+      if (tipo === "cavalo") payload.motorista_id = motoristaEscolhido;
+
+      const btn = document.getElementById("vf-save");
+      btn.disabled = true; btn.textContent = "Salvando…";
+      try {
+        if (motoristaEscolhido) await LIVE.liberarVeiculosDoMotorista(motoristaEscolhido);
+        if (ed) await LIVE.atualizarVeiculo(existente.placa, payload);
+        else await LIVE.criarVeiculo({ placa, tipo, ...payload });
+        U.closeDrawer();
+        U.toast(ed ? "Veículo atualizado." : "Veículo cadastrado.");
+        carregar();
+      } catch (e) {
+        U.toast("Erro ao salvar: " + (e.message || e));
+        btn.disabled = false; btn.textContent = ed ? "Salvar alterações" : "Cadastrar veículo";
+      }
+    };
+  }
+
   function card(v, mf) {
     const oleo = oleoInfo(v);
     const consumoBad = v.media_kml && v.media_kml < mf * 0.95;
@@ -92,6 +199,7 @@
       </div>
       <div class="fleet-foot">
         <button class="btn btn-sm" data-situacao="${v.placa}" type="button">Alterar situação</button>
+        <button class="btn btn-sm" data-editar-veiculo="${v.placa}" type="button">Editar veículo</button>
         <a class="btn btn-sm btn-ghost" href="#/manutencoes?placa=${v.placa}">Manutenções →</a>
       </div>
     </div>`;
@@ -99,6 +207,11 @@
 
   function view() {
     return `
+    <div class="filters">
+      <div class="spacer"></div>
+      <button class="btn btn-primary" id="btn-novo-veiculo" disabled>+ Novo veículo</button>
+    </div>
+
     <div class="kpi-grid" id="frota-kpis"><div class="empty">Carregando…</div></div>
 
     <div class="section-title">Veículos (cavalo + carreta)</div>
@@ -144,19 +257,32 @@
         if (v) formSituacao(v);
       };
     });
+    grid.querySelectorAll("[data-editar-veiculo]").forEach(btn => {
+      btn.onclick = () => {
+        const v = state.veiculos.find(x => x.placa === btn.dataset.editarVeiculo);
+        if (v) formVeiculo(v);
+      };
+    });
 
     carretasEl.innerHTML = `<table class="tbl" style="min-width:0">
-      <thead><tr><th>Carreta</th><th>ANTT</th><th>Vinculada a</th></tr></thead>
+      <thead><tr><th>Carreta</th><th>ANTT</th><th>Vinculada a</th><th></th></tr></thead>
       <tbody>
         ${carretas.length ? carretas.map(c => {
           const cav = cavalos.find(v => v.carreta_placa === c.placa);
           const antt = cav && cav.antt_empresa ? U.esc(cav.antt_empresa) + (cav.antt_numero ? " · " + U.esc(cav.antt_numero) : "") : "—";
           return `<tr><td class="td-main mono">${U.placaFmt(c.placa)}</td>
             <td>${antt}</td>
-            <td>${cav ? U.placaFmt(cav.placa) : '<span class="muted">reserva</span>'}</td></tr>`;
-        }).join("") : '<tr><td colspan="3" class="empty">Nenhuma carreta cadastrada.</td></tr>'}
+            <td>${cav ? U.placaFmt(cav.placa) : '<span class="muted">reserva</span>'}</td>
+            <td><button class="btn btn-sm btn-ghost" data-editar-veiculo="${c.placa}" type="button">editar</button></td></tr>`;
+        }).join("") : '<tr><td colspan="4" class="empty">Nenhuma carreta cadastrada.</td></tr>'}
       </tbody>
     </table>`;
+    carretasEl.querySelectorAll("[data-editar-veiculo]").forEach(btn => {
+      btn.onclick = () => {
+        const v = state.veiculos.find(x => x.placa === btn.dataset.editarVeiculo);
+        if (v) formVeiculo(v);
+      };
+    });
 
     if (state.scrollPara) {
       const el = document.getElementById("veic-" + state.scrollPara);
@@ -171,10 +297,12 @@
 
   async function carregar() {
     try {
-      state.veiculos = await window.LIVE.frota();
+      const [veiculos, motoristas] = await Promise.all([window.LIVE.frota(), window.LIVE.motoristas()]);
+      state.veiculos = veiculos;
+      state.motoristas = motoristas;
       state.erro = null;
     } catch (e) {
-      state.veiculos = [];
+      state.veiculos = []; state.motoristas = [];
       state.erro = "Não foi possível carregar a frota: " + (e.message || e);
     }
     renderTudo();
@@ -182,7 +310,8 @@
 
   function bind(params) {
     state.scrollPara = params && params.placa;
-    carregar();
+    document.getElementById("btn-novo-veiculo").onclick = () => formVeiculo(null);
+    carregar().then(() => { document.getElementById("btn-novo-veiculo").disabled = false; });
   }
 
   window.VIEWS = window.VIEWS || {};

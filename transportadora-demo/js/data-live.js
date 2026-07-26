@@ -334,6 +334,40 @@
     return data;
   };
 
+  /* frota: cadastro de veículo (placa não muda depois de criado — é a chave primária) */
+  LIVE.criarVeiculo = async function (dados) {
+    const { data, error } = await window.sb.from("veiculos").insert(dados).select().single();
+    if (error) throw error;
+    return data;
+  };
+
+  LIVE.atualizarVeiculo = async function (placa, dados) {
+    const { data, error } = await window.sb.from("veiculos").update(dados).eq("placa", placa).select().single();
+    if (error) throw error;
+    return data;
+  };
+
+  /* libera qualquer veículo que hoje aponte pra este motorista — usado antes de
+     atribuir um novo, pra nunca deixar um motorista com 2 veículos ao mesmo tempo
+     (patch_010: unique(motorista_id) também garante isso no banco) */
+  LIVE.liberarVeiculosDoMotorista = async function (motoristaId) {
+    const { error } = await window.sb.from("veiculos").update({ motorista_id: null }).eq("motorista_id", motoristaId);
+    if (error) throw error;
+  };
+
+  /* troca de vínculo pelo lado do motorista (tela Motoristas): libera de onde ele
+     estiver, libera quem estiver no veículo escolhido, e então atribui. novaPlaca
+     null = só deixa o motorista sem veículo. */
+  LIVE.atribuirVeiculoAoMotorista = async function (motoristaId, novaPlaca) {
+    await LIVE.liberarVeiculosDoMotorista(motoristaId);
+    if (!novaPlaca) return null;
+    const { error: eLivrar } = await window.sb.from("veiculos").update({ motorista_id: null }).eq("placa", novaPlaca);
+    if (eLivrar) throw eLivrar;
+    const { data, error } = await window.sb.from("veiculos").update({ motorista_id: motoristaId }).eq("placa", novaPlaca).select().single();
+    if (error) throw error;
+    return data;
+  };
+
   /* manutenção: ordens de manutenção (fluxo de trabalho) — histórico de custo continua em "manutencoes" */
   const SELECT_ORDEM = "*, veiculos(placa,tipo,situacao)";
 
