@@ -29,8 +29,13 @@ jobs:
       - name: Baixar o repositorio
         uses: actions/checkout@v4
 
+      # enablement: true faz o proprio workflow criar/ativar o site do Pages se
+      # ele ainda nao existir. Sem isso, este passo falha com "Get Pages site
+      # failed" quando o Pages nunca foi provisionado no repositorio.
       - name: Preparar o Pages
         uses: actions/configure-pages@v5
+        with:
+          enablement: true
 
       - name: Empacotar só o app
         uses: actions/upload-pages-artifact@v3
