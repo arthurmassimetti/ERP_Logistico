@@ -90,6 +90,23 @@
     </select></div>`;
   }
 
+  /* lado inverso do vínculo: editando uma carreta, escolhe qual cavalo a puxa.
+     carreta_placa mora no cavalo, então isso grava no OUTRO registro ao salvar
+     (LIVE.atribuirCarretaAoCavalo), não neste. */
+  function opcoesCavalo(existente, tipoSelecionado) {
+    if (tipoSelecionado !== "carreta") return "";
+    const cavalos = state.veiculos.filter(v => v.tipo === "cavalo");
+    const atual = existente ? (cavalos.find(c => c.carreta_placa === existente.placa) || {}).placa : null;
+    return `
+    <div class="full"><label>Cavalo vinculado</label><select id="vf-cavalo">
+      <option value="">nenhum (reserva)</option>
+      ${cavalos.map(c => {
+        const outra = c.carreta_placa && (!existente || c.carreta_placa !== existente.placa) ? ` (já puxa ${U.placaFmt(c.carreta_placa)})` : "";
+        return `<option value="${c.placa}" ${atual === c.placa ? "selected" : ""}>${U.placaFmt(c.placa)}${U.esc(outra)}</option>`;
+      }).join("")}
+    </select></div>`;
+  }
+
   function formVeiculo(existente) {
     const ed = !!existente;
     const g = (c, d) => ed ? (existente[c] ?? d) : d;
@@ -116,8 +133,8 @@
         <div><label>Status MCT</label><input id="vf-mct-status" value="${U.esc(g("mct_status", "") || "")}"></div>
         <div><label>Empresa ANTT</label><input id="vf-antt-empresa" value="${U.esc(g("antt_empresa", "") || "")}"></div>
         <div><label>Número ANTT</label><input id="vf-antt-numero" value="${U.esc(g("antt_numero", "") || "")}"></div>
-        <div id="vf-campo-carreta">${opcoesCarreta(existente, tipoAtual)}</div>
-        <div id="vf-campo-motorista">${opcoesMotorista(existente, tipoAtual)}</div>
+        <div id="vf-campo-carreta">${tipoAtual === "cavalo" ? opcoesCarreta(existente, tipoAtual) : opcoesCavalo(existente, tipoAtual)}</div>
+        <div id="vf-campo-motorista">${tipoAtual === "cavalo" ? opcoesMotorista(existente, tipoAtual) : ""}</div>
         <div class="full form-note"><span class="req">*</span> campo obrigatório</div>
       </div>`,
       rodape: `
@@ -127,8 +144,9 @@
 
     if (!ed) {
       document.getElementById("vf-tipo").onchange = e => {
-        document.getElementById("vf-campo-carreta").innerHTML = opcoesCarreta(null, e.target.value);
-        document.getElementById("vf-campo-motorista").innerHTML = opcoesMotorista(null, e.target.value);
+        const t = e.target.value;
+        document.getElementById("vf-campo-carreta").innerHTML = t === "cavalo" ? opcoesCarreta(null, t) : opcoesCavalo(null, t);
+        document.getElementById("vf-campo-motorista").innerHTML = t === "cavalo" ? opcoesMotorista(null, t) : "";
       };
     }
 
@@ -140,9 +158,11 @@
 
       const numOrNull = id => { const val = document.getElementById(id).value; return val === "" ? null : parseInt(val, 10); };
       const strOrNull = id => document.getElementById(id).value.trim() || null;
-      const elCarreta = document.getElementById("vf-carreta");
-      const elMotorista = document.getElementById("vf-motorista");
+      const elCarreta = document.getElementById("vf-carreta");     // só existe se tipo=cavalo
+      const elMotorista = document.getElementById("vf-motorista"); // só existe se tipo=cavalo
+      const elCavalo = document.getElementById("vf-cavalo");       // só existe se tipo=carreta
       const motoristaEscolhido = elMotorista ? (elMotorista.value || null) : null;
+      const cavaloEscolhido = elCavalo ? (elCavalo.value || null) : null;
 
       const payload = {
         modelo: strOrNull("vf-modelo"), ano_modelo: strOrNull("vf-ano"), cor: strOrNull("vf-cor"),
@@ -151,9 +171,11 @@
         tacografo_obs: strOrNull("vf-taco-obs"),
         mct_numero: strOrNull("vf-mct-num"), mct_status: strOrNull("vf-mct-status"),
         antt_empresa: strOrNull("vf-antt-empresa"), antt_numero: strOrNull("vf-antt-numero"),
-        carreta_placa: elCarreta ? (elCarreta.value || null) : null,
       };
-      if (tipo === "cavalo") payload.motorista_id = motoristaEscolhido;
+      if (tipo === "cavalo") {
+        payload.carreta_placa = elCarreta ? (elCarreta.value || null) : null;
+        payload.motorista_id = motoristaEscolhido;
+      }
 
       const btn = document.getElementById("vf-save");
       btn.disabled = true; btn.textContent = "Salvando…";
@@ -161,6 +183,7 @@
         if (motoristaEscolhido) await LIVE.liberarVeiculosDoMotorista(motoristaEscolhido);
         if (ed) await LIVE.atualizarVeiculo(existente.placa, payload);
         else await LIVE.criarVeiculo({ placa, tipo, ...payload });
+        if (tipo === "carreta") await LIVE.atribuirCarretaAoCavalo(ed ? existente.placa : placa, cavaloEscolhido);
         U.closeDrawer();
         U.toast(ed ? "Veículo atualizado." : "Veículo cadastrado.");
         carregar();
@@ -214,10 +237,10 @@
 
     <div class="kpi-grid" id="frota-kpis"><div class="empty">Carregando…</div></div>
 
-    <div class="section-title">Veículos (cavalo + carreta)</div>
+    <div class="section-title">Cavalos</div>
     <div class="fleet-grid" id="frota-veiculos"><div class="empty">Carregando…</div></div>
 
-    <div class="section-title">Carretas e ANTT</div>
+    <div class="section-title">Carretas</div>
     <div class="table-wrap" id="frota-carretas"></div>
     <div class="legend-note">Dados ao vivo do cadastro de Frota no Supabase.</div>`;
   }

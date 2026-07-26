@@ -368,6 +368,20 @@
     return data;
   };
 
+  /* troca de vínculo pelo lado da carreta: qual cavalo passa a puxá-la. O campo
+     carreta_placa mora no CAVALO, não na carreta — então "atribuir" aqui é
+     liberar quem já puxa essa carreta e gravar no cavalo escolhido (que também
+     larga, na mesma escrita, qualquer outra carreta que ele tivesse antes).
+     novoCavaloPlaca null = a carreta fica sem cavalo (reserva). */
+  LIVE.atribuirCarretaAoCavalo = async function (carretaPlaca, novoCavaloPlaca) {
+    const { error: eLivrar } = await window.sb.from("veiculos").update({ carreta_placa: null }).eq("carreta_placa", carretaPlaca);
+    if (eLivrar) throw eLivrar;
+    if (!novoCavaloPlaca) return null;
+    const { data, error } = await window.sb.from("veiculos").update({ carreta_placa: carretaPlaca }).eq("placa", novoCavaloPlaca).select().single();
+    if (error) throw error;
+    return data;
+  };
+
   /* manutenção: ordens de manutenção (fluxo de trabalho) — histórico de custo continua em "manutencoes" */
   const SELECT_ORDEM = "*, veiculos(placa,tipo,situacao)";
 
