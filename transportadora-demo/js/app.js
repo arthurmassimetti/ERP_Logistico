@@ -20,6 +20,7 @@
     { id: "frota-grupo", rotulo: "Frota", icone: "fleet", itens: [
       { id: "frota", rotulo: "Veículos" },
       { id: "manutencoes", rotulo: "Manutenções" },
+      { id: "ocorrencias", rotulo: "Ocorrências" },
     ] },
     { id: "motoristas", rotulo: "Motoristas", icone: "users" },
   ];

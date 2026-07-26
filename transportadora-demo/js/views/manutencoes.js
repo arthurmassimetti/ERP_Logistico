@@ -14,6 +14,8 @@
   const TIPO_ORDEM = { preventiva: { r: "Preventiva", cls: "tag-ok" }, corretiva: { r: "Corretiva", cls: "tag-warn" } };
   const tagTipoOrdem = t => `<span class="tag ${(TIPO_ORDEM[t] || {}).cls || "tag-neutro"}">${U.esc((TIPO_ORDEM[t] || {}).r || t || "—")}</span>`;
 
+  const TIPOS_OCORRENCIA = { pneu: "pneu", freio: "freio", luz: "luz", motor: "motor", eletrica: "elétrica", outro: "problema" };
+
   const state = {
     tab: "ordens",
     ordens: [], veiculos: [], historico: [],
@@ -28,11 +30,15 @@
   }
 
   /* ---------------------------------------------------------------- abrir ordem */
-  function formNovaOrdem() {
+  function formNovaOrdem(ocorrencia) {
     const opcoes = state.veiculos.map(v =>
-      `<option value="${v.placa}">${U.placaFmt(v.placa)}${v.tipo === "carreta" ? " (carreta)" : ""}</option>`).join("");
+      `<option value="${v.placa}" ${ocorrencia && ocorrencia.veiculo_placa === v.placa ? "selected" : ""}>${U.placaFmt(v.placa)}${v.tipo === "carreta" ? " (carreta)" : ""}</option>`).join("");
+    const problemaInicial = ocorrencia
+      ? `Relatado pelo motorista${ocorrencia.motoristas ? " (" + ocorrencia.motoristas.nome + ")" : ""} — ${TIPOS_OCORRENCIA[ocorrencia.tipo] || ocorrencia.tipo}: ${ocorrencia.descricao || "sem descrição"}`
+      : "";
     U.openDrawer({
       titulo: "Nova ordem de manutenção",
+      sub: ocorrencia ? "Preenchida a partir de uma ocorrência relatada pelo motorista." : "",
       corpo: `
       <div class="form-grid">
         <div class="full"><label>Veículo<span class="req">*</span></label><select id="of-veiculo">${opcoes}</select></div>
@@ -41,7 +47,7 @@
           <option value="preventiva">Preventiva</option>
         </select></div>
         <div><label>Km</label><input type="number" id="of-km" min="0"></div>
-        <div class="full"><label>Problema<span class="req">*</span></label><textarea id="of-problema" rows="3" placeholder="o que foi identificado"></textarea></div>
+        <div class="full"><label>Problema<span class="req">*</span></label><textarea id="of-problema" rows="3" placeholder="o que foi identificado">${U.esc(problemaInicial)}</textarea></div>
         <div><label>Responsável</label><input id="of-responsavel" placeholder="quem está tratando"></div>
         <div><label>Oficina</label><input id="of-oficina" placeholder="opcional"></div>
         <div class="full"><label class="check-inline"><input type="checkbox" id="of-bloquear"> bloquear o veículo agora</label></div>
@@ -69,12 +75,16 @@
           oficina: document.getElementById("of-oficina").value.trim() || null,
           km: parseInt(document.getElementById("of-km").value, 10) || null,
           aberta_por: sessao && sessao.user ? sessao.user.id : null,
+          ocorrencia_id: ocorrencia ? ocorrencia.id : null,
         });
         if (bloquear) {
           await LIVE.atualizarSituacaoVeiculo(veiculo_placa, {
             situacao: "bloqueado",
             situacao_motivo: `Ordem de manutenção #${ordem.numero} aberta`,
           });
+        }
+        if (ocorrencia && !["resolvida", "descartada"].includes(ocorrencia.status)) {
+          await LIVE.atualizarOcorrencia(ocorrencia.id, { status: "em_analise" });
         }
         U.closeDrawer();
         U.toast(`Ordem #${ordem.numero} aberta.`);
@@ -85,6 +95,12 @@
       }
     };
   }
+
+  /* chamado pela tela de Ocorrências (#/manutencoes?ocorrencia=<id>) pra abrir a
+     ordem já pré-preenchida com o que o motorista relatou */
+  window.abrirOrdemDeOcorrencia = function (o) {
+    location.hash = "#/manutencoes?ocorrencia=" + o.id;
+  };
 
   /* ------------------------------------------------------- detalhe / concluir / cancelar */
   function formDetalheOrdem(o) {
@@ -292,7 +308,13 @@
     state.filtroPlaca = (params && params.placa) || "";
     document.getElementById("mt-tab-ordens").onclick = () => { state.tab = "ordens"; renderAba(); };
     document.getElementById("mt-tab-historico").onclick = () => { state.tab = "historico"; renderAba(); };
-    carregar();
+    carregar().then(() => {
+      if (params && params.ocorrencia) {
+        LIVE.ocorrenciaPorId(params.ocorrencia)
+          .then(o => formNovaOrdem(o))
+          .catch(e => U.toast("Não foi possível carregar a ocorrência: " + (e.message || e)));
+      }
+    });
   }
 
   window.VIEWS = window.VIEWS || {};

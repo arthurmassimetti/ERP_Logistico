@@ -5,9 +5,20 @@
     window.SUPABASE_CONFIG.publishableKey
   );
 
-  /* já está logado? vai direto pro painel */
-  sb.auth.getSession().then(({ data }) => {
-    if (data.session) location.replace("index.html");
+  /* motorista vai direto pro portal dele — nunca passa pelo painel administrativo.
+     Qualquer outro papel (ou erro/sem perfil) cai no painel, como sempre. */
+  async function destinoPorPapel(userId) {
+    try {
+      const { data: perfil } = await sb.from("perfis").select("papel").eq("user_id", userId).single();
+      return perfil && perfil.papel === "motorista" ? "motorista.html" : "index.html";
+    } catch (_) {
+      return "index.html";
+    }
+  }
+
+  /* já está logado? vai direto pro destino certo */
+  sb.auth.getSession().then(async ({ data }) => {
+    if (data.session) location.replace(await destinoPorPapel(data.session.user.id));
   });
 
   const form = document.getElementById("form-login");
@@ -49,14 +60,14 @@
     btnEntrar.disabled = true;
     btnEntrar.textContent = "Entrando…";
     try {
-      const { error } = await sb.auth.signInWithPassword({ email, password: senha });
+      const { data, error } = await sb.auth.signInWithPassword({ email, password: senha });
       if (error) {
         mostrarErro(traduzErro(error));
         btnEntrar.disabled = false;
         btnEntrar.textContent = "Entrar";
         return;
       }
-      location.replace("index.html");
+      location.replace(await destinoPorPapel(data.user.id));
     } catch (err) {
       mostrarErro(traduzErro(err));
       btnEntrar.disabled = false;

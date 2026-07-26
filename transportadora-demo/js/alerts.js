@@ -6,11 +6,13 @@
     const A = [];
     const push = (a) => A.push(a);
 
-    const [contasPagar, contasReceber, veiculos, vales] = await Promise.all([
+    const hoje = U.hojeISO();
+    const [contasPagar, contasReceber, veiculos, vales, roteiroJanela] = await Promise.all([
       window.LIVE.contasPagar(),
       window.LIVE.contasReceber(),
       window.LIVE.frota(),
       window.LIVE.vales(),
+      window.LIVE.roteiro(hoje, U.addDias(hoje, 14)),
     ]);
     const cavalos = veiculos.filter(v => v.tipo === "cavalo");
 
@@ -73,6 +75,21 @@
         descricao: `Vale de ${U.money(vl.valor)} em ${U.dBR(vl.data)} · pago ${U.money(vl.pago)} · saldo a descontar ${U.money(vl.saldo)}`,
         entidade: nome, prazo: null,
         link: "#/motoristas/" + vl.motorista_id, linkLabel: "ver extrato",
+      });
+    });
+
+    /* ---- veículo bloqueado/em manutenção/inativo com tarefa agendada no roteiro (14 dias) ---- */
+    const motoristasComTarefa = new Set(roteiroJanela.map(r => r.motorista_id));
+    veiculos.forEach(v => {
+      if (!v.situacao || v.situacao === "disponivel") return;
+      if (!v.motorista_id || !motoristasComTarefa.has(v.motorista_id)) return;
+      const nome = v.motoristas ? v.motoristas.nome : "—";
+      push({
+        tipo: "Veículo indisponível", icone: "alert", prioridade: "alta",
+        titulo: `Tarefa agendada com veículo ${U.situacaoVeiculoInfo(v.situacao).rotulo} — ${nome}`,
+        descricao: `${U.placaFmt(v.placa)}${v.situacao_motivo ? " · " + v.situacao_motivo : ""}`,
+        entidade: nome, prazo: null,
+        link: "#/roteiro", linkLabel: "ver roteiro",
       });
     });
 

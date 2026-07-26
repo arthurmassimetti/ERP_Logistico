@@ -22,7 +22,7 @@
     if (cacheVeiculos && !forcar) return cacheVeiculos;
     const { data, error } = await window.sb
       .from("veiculos")
-      .select("placa,tipo,motorista_id")
+      .select("placa,tipo,motorista_id,situacao,situacao_motivo")
       .eq("ativo", true)
       .order("placa");
     if (error) throw error;
@@ -375,6 +375,65 @@
   /* histórico de manutenções (livro-caixa, já existia no banco antes de ter tela) */
   LIVE.historicoManutencoes = async function () {
     const { data, error } = await window.sb.from("manutencoes").select("*").order("data", { ascending: false });
+    if (error) throw error;
+    return data;
+  };
+
+  /* portal do motorista: veículo vinculado (RLS já garante que só vem o próprio, se existir) */
+  LIVE.meuVeiculo = async function () {
+    const { data, error } = await window.sb.from("veiculos").select("*").limit(1).maybeSingle();
+    if (error) throw error;
+    return data;
+  };
+
+  /* portal do motorista: checklist já enviado hoje pra este veículo (null se ainda não enviou) */
+  LIVE.meuChecklistHoje = async function (veiculoPlaca) {
+    const { data, error } = await window.sb
+      .from("checklists").select("*")
+      .eq("veiculo_placa", veiculoPlaca).eq("data", window.U.hojeISO())
+      .order("criado_em", { ascending: false }).limit(1).maybeSingle();
+    if (error) throw error;
+    return data;
+  };
+
+  LIVE.criarChecklist = async function (dados) {
+    const { data, error } = await window.sb.from("checklists").insert(dados).select().single();
+    if (error) throw error;
+    return data;
+  };
+
+  /* portal do motorista: relato de problema (ocorrência) — insert-only, RLS garante que só cria o próprio */
+  LIVE.criarOcorrencia = async function (dados) {
+    const { data, error } = await window.sb.from("ocorrencias").insert(dados).select().single();
+    if (error) throw error;
+    return data;
+  };
+
+  LIVE.minhasOcorrencias = async function () {
+    const { data, error } = await window.sb.from("ocorrencias").select("*").order("criado_em", { ascending: false });
+    if (error) throw error;
+    return data;
+  };
+
+  /* admin: fila de ocorrências relatadas pelos motoristas */
+  LIVE.ocorrencias = async function () {
+    const { data, error } = await window.sb
+      .from("ocorrencias").select("*, motoristas(nome), veiculos(placa,tipo), roteiro(data,destino_local,destino_cidade,destino_uf)")
+      .order("criado_em", { ascending: false });
+    if (error) throw error;
+    return data;
+  };
+
+  LIVE.atualizarOcorrencia = async function (id, dados) {
+    const { data, error } = await window.sb.from("ocorrencias").update(dados).eq("id", id).select().single();
+    if (error) throw error;
+    return data;
+  };
+
+  /* admin: buscar uma ocorrência específica (usado ao abrir ordem a partir dela, via #/manutencoes?ocorrencia=) */
+  LIVE.ocorrenciaPorId = async function (id) {
+    const { data, error } = await window.sb
+      .from("ocorrencias").select("*, motoristas(nome), veiculos(placa,tipo)").eq("id", id).single();
     if (error) throw error;
     return data;
   };

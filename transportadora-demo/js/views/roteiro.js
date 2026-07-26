@@ -18,8 +18,31 @@
   const HOJE = U.hojeISO();
 
   const state = {
-    motoristas: [], roteiro: [], erro: null, motoristaFiltro: "",
+    motoristas: [], roteiro: [], veiculos: [], erro: null, motoristaFiltro: "",
   };
+
+  /* veículo hoje vinculado ao motorista da tarefa — não há coluna de veículo no
+     roteiro (de propósito, sem tabela "viagens" nova), então o vínculo é sempre
+     o atual, não necessariamente o que valia quando a tarefa foi cadastrada. */
+  function veiculoDoMotorista(motoristaId) {
+    return state.veiculos.find(v => v.motorista_id === motoristaId) || null;
+  }
+
+  function tagVeiculoComprometido(motoristaId) {
+    const v = veiculoDoMotorista(motoristaId);
+    if (!v || !v.situacao || v.situacao === "disponivel") return "";
+    const info = U.situacaoVeiculoInfo(v.situacao);
+    return ` <span class="tag tag-danger" title="${U.esc(v.situacao_motivo || "")}">veículo ${U.esc(info.rotulo)}</span>`;
+  }
+
+  function alertasVeiculoIndisponivel(ag) {
+    const out = [];
+    ag.forEach(b => {
+      const v = veiculoDoMotorista(b.motorista.id);
+      if (v && v.situacao && v.situacao !== "disponivel" && (b.hoje || b.futuras.length)) out.push({ ...b, veiculo: v });
+    });
+    return out;
+  }
 
   function tagStatus(status) {
     const s = (status || "").toLowerCase();
@@ -103,9 +126,31 @@
   function renderAlertas() {
     const ag = agenda();
     const sem = alertasSemProximaRota(ag);
+    const indisponiveis = alertasVeiculoIndisponivel(ag);
     const alvo = document.getElementById("rot-alertas");
-    if (!sem.length) { alvo.innerHTML = ""; return; }
-    alvo.innerHTML = `
+    if (!sem.length && !indisponiveis.length) { alvo.innerHTML = ""; return; }
+
+    let html = "";
+    if (indisponiveis.length) {
+      html += `
+      <div class="section-title grp-danger">⚠ Veículo indisponível com tarefa agendada</div>
+      <div class="alert-list">
+        ${indisponiveis.map(b => `
+          <div class="alert-item p-alta">
+            <div class="alert-ico">${U.icons.alert}</div>
+            <div class="alert-body">
+              <div class="alert-titulo">${U.esc(b.motorista.nome)} — veículo ${U.placaFmt(b.veiculo.placa)} está ${U.esc(U.situacaoVeiculoInfo(b.veiculo.situacao).rotulo)}</div>
+              <div class="alert-desc">${b.veiculo.situacao_motivo ? U.esc(b.veiculo.situacao_motivo) + " · " : ""}${[
+                b.hoje ? "tem entrega hoje" : "",
+                b.futuras.length ? `${b.futuras.length} entrega(s) futura(s) agendada(s)` : "",
+              ].filter(Boolean).join(" e ")}.</div>
+            </div>
+            <div class="alert-act"><a class="btn btn-sm btn-ghost" href="#/manutencoes?placa=${b.veiculo.placa}">ver manutenções →</a></div>
+          </div>`).join("")}
+      </div>`;
+    }
+    if (sem.length) {
+      html += `
       <div class="section-title grp-danger">⚠ Atenção — motoristas sem próxima rota</div>
       <div class="alert-list">
         ${sem.map(b => `
@@ -118,6 +163,8 @@
             <div class="alert-act"><button class="btn btn-sm btn-primary" data-abrir-form="${b.motorista.id}">+ nova entrega</button></div>
           </div>`).join("")}
       </div>`;
+    }
+    alvo.innerHTML = html;
     alvo.querySelectorAll("[data-abrir-form]").forEach(btn => {
       btn.onclick = () => formRoteiro(null, btn.dataset.abrirForm);
     });
@@ -141,6 +188,7 @@
           <div class="rot-foot">
             <span class="rot-uf">${rodape}</span>
             ${b.hoje ? tagStatus(b.hoje.status) : '<span class="tag tag-ok">disponível</span>'}
+            ${tagVeiculoComprometido(b.motorista.id)}
           </div>
         </div>`;
       }).join("")}
@@ -161,7 +209,7 @@
         <tbody>
           ${linhas.map(b => `
             <tr>
-              <td class="td-main">${U.esc(b.motorista.nome)}</td>
+              <td class="td-main">${U.esc(b.motorista.nome)}${tagVeiculoComprometido(b.motorista.id)}</td>
               <td>${b.hoje ? tagStatus(b.hoje.status) : '<span class="tag tag-ok">disponível</span>'}</td>
               <td class="num">${b.futuras.length + (b.hoje ? 1 : 0)}</td>
               <td>${b.futuras.length
@@ -193,7 +241,7 @@
               <td>${U.esc(r.motoristas ? r.motoristas.nome : "—")}</td>
               <td>${U.esc(r.destino_local || "—")}${r.destino_cidade ? ` <span class="td-sub">· ${U.esc(r.destino_cidade)}</span>` : ""}</td>
               <td class="mono">${U.esc(r.destino_uf || "—")}</td>
-              <td>${tagStatus(r.status)}</td>
+              <td>${tagStatus(r.status)}${tagVeiculoComprometido(r.motorista_id)}</td>
             </tr>`).join("")}
         </tbody>
       </table></div>`;
@@ -308,14 +356,15 @@
 
   async function carregar() {
     try {
-      const [motoristas, roteiro] = await Promise.all([
-        LIVE.motoristas(), LIVE.roteiro(HOJE, U.addDias(HOJE, 30)),
+      const [motoristas, roteiro, veiculos] = await Promise.all([
+        LIVE.motoristas(), LIVE.roteiro(HOJE, U.addDias(HOJE, 30)), LIVE.veiculos(true),
       ]);
       state.motoristas = motoristas;
       state.roteiro = roteiro;
+      state.veiculos = veiculos;
       state.erro = null;
     } catch (e) {
-      state.motoristas = []; state.roteiro = [];
+      state.motoristas = []; state.roteiro = []; state.veiculos = [];
       state.erro = "Não foi possível carregar o roteiro: " + (e.message || e);
     }
     document.getElementById("btn-nova-entrega").disabled = false;

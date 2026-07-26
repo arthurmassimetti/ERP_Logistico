@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>Phorte Aguiar — Meu painel</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🚚</text></svg>">
-<link rel="stylesheet" href="css/styles.css?v=28">
+<link rel="stylesheet" href="css/styles.css?v=29">
 </head>
 <body class="mot-body">
 
@@ -19,38 +19,20 @@
     <button class="btn-sair" id="btn-sair">Sair</button>
   </header>
 
-  <main class="mot-content">
-    <section>
-      <div class="mot-secao-titulo">Hoje</div>
-      <div id="mot-hoje" class="mt"><div class="empty">Carregando…</div></div>
-    </section>
-
-    <section>
-      <div class="mot-secao-titulo">Próximos dias</div>
-      <div id="mot-proximos" class="mt"><div class="empty">Carregando…</div></div>
-    </section>
-
-    <section>
-      <div class="mot-secao-titulo">Este mês</div>
-      <div class="mot-kpis mt" id="mot-kpis"></div>
-    </section>
-
-    <section>
-      <div class="mot-secao-titulo">Meus fretes recentes</div>
-      <div id="mot-fretes" class="mt"><div class="empty">Carregando…</div></div>
-    </section>
-
-    <section>
-      <div class="mot-secao-titulo">Vales</div>
-      <div id="mot-vales" class="mt"><div class="empty">Carregando…</div></div>
-    </section>
+  <main class="mot-content" id="mot-main">
+    <section id="aba-inicio" class="mot-aba"><div class="empty">Carregando…</div></section>
+    <section id="aba-viagens" class="mot-aba" hidden></section>
+    <section id="aba-checklist" class="mot-aba" hidden></section>
+    <section id="aba-problema" class="mot-aba" hidden></section>
   </main>
+
+  <nav class="mot-tabbar" id="mot-tabbar"></nav>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
-<script src="js/supabase-config.js?v=28"></script>
-<script src="js/utils.js?v=28"></script>
-<script src="js/data-live.js?v=28"></script>
-<script src="js/motorista-app.js?v=28"></script>
+<script src="js/supabase-config.js?v=29"></script>
+<script src="js/utils.js?v=29"></script>
+<script src="js/data-live.js?v=29"></script>
+<script src="js/motorista-app.js?v=29"></script>
 </body>
 </html>
