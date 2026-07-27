@@ -286,6 +286,33 @@ tr.highlight-row { animation: rowflash 2.4s ease-out; }
 .rot-foot { display: flex; justify-content: space-between; align-items: center; margin-top: 6px; gap: 8px; flex-wrap: wrap; }
 .rot-uf { font-size: 11px; font-weight: 700; color: var(--text-3); }
 
+/* kanban de fretes (status de entrega) */
+.kanban-board { display: flex; gap: 12px; align-items: flex-start; overflow-x: auto; padding-bottom: 4px; }
+.kanban-col {
+  flex: 1 1 260px; min-width: 260px; background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 10px; transition: border-color .15s, background .15s;
+}
+.kanban-col.drop-hover { border-color: var(--primary); background: var(--primary-soft); }
+.kanban-col-head { display: flex; align-items: center; justify-content: space-between; padding: 4px 4px 10px; }
+.kanban-col-titulo { font-size: 12.5px; font-weight: 700; display: flex; align-items: center; gap: 6px; }
+.kanban-col-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+.kanban-col[data-status="aguardando_coleta"] .kanban-col-dot { background: var(--warn); }
+.kanban-col[data-status="em_transito"] .kanban-col-dot { background: var(--info); }
+.kanban-col[data-status="entregue"] .kanban-col-dot { background: var(--ok); }
+.kanban-cards { display: flex; flex-direction: column; gap: 8px; min-height: 40px; }
+.kanban-card {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+  padding: 10px 12px; box-shadow: var(--shadow); cursor: grab; user-select: none;
+}
+.kanban-card:hover { border-color: var(--border-2); }
+.kanban-card.dragging { opacity: .4; }
+.kanban-card .kc-data { font-size: 11px; color: var(--text-3); font-weight: 600; }
+.kanban-card .kc-rota { font-size: 12.5px; font-weight: 700; margin: 3px 0 5px; }
+.kanban-card .kc-mot { font-size: 11.5px; color: var(--text-2); }
+.kanban-card .kc-foot { display: flex; justify-content: space-between; align-items: center; margin-top: 6px; gap: 6px; }
+.kanban-card .kc-valor { font-size: 12.5px; font-weight: 700; }
+.kanban-empty { font-size: 12px; color: var(--text-3); text-align: center; padding: 14px 6px; }
+
 /* frota */
 .fleet-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; }
 .fleet-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; box-shadow: var(--shadow); }
