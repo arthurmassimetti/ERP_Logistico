@@ -1,15 +1,29 @@
-/* Fretes — dados vivos do Supabase. Roteiro diário agora é tela própria (js/views/roteiro.js). */
+/* Fretes — dados vivos do Supabase. Roteiro diário agora é tela própria (js/views/roteiro.js).
+   Listagem principal tem 2 visualizações: Kanban (dia a dia, arrasta card pra mudar o status de
+   entrega) e Tabela (conferência histórica, como já era). status_entrega é conceito separado do
+   status de pagamento (U.statusTagFrete) — um frete pode estar entregue e pendente de pagamento
+   ao mesmo tempo. Ver supabase/patch_012_kanban_status_frete.sql. */
 (function () {
   const U = window.U;
 
   const HOJE = U.hojeISO();
   const LIMITE_LISTA = 20;
 
+  const STATUS_COLS = [
+    { id: "aguardando_coleta", nome: "Aguardando Coleta" },
+    { id: "em_transito", nome: "Em Trânsito" },
+    { id: "entregue", nome: "Entregue" },
+  ];
+  const nomeStatus = (id) => (STATUS_COLS.find(c => c.id === id) || {}).nome || id;
+
   const state = {
-    mes: "", transp: "", status: "", motoristaId: "", busca: "", categoriaId: "",
+    mes: HOJE.slice(0, 7), transp: "", status: "", motoristaId: "", busca: "", categoriaId: "",
+    viewMode: "kanban", // "kanban" | "tabela"
     dados: null,        // fretes vindos do Supabase (null = ainda não carregou)
     motoristas: [], veiculos: [], categorias: [], erro: null,
   };
+
+  let canalRealtime = null;
 
   function filtrar() {
     if (!state.dados) return [];
@@ -37,7 +51,7 @@
     <div class="section-title">Fretes lançados <span class="count-pill" id="frete-count">carregando…</span></div>
     <div class="filters">
       <div class="field"><label>Mês</label>
-        <input type="month" id="ff-mes"></div>
+        <input type="month" id="ff-mes" value="${U.esc(state.mes)}"></div>
       <div class="field"><label>Motorista</label>
         <select id="ff-mot"><option value="">todos</option></select></div>
       <div class="field"><label>Transportadora</label>
@@ -51,18 +65,116 @@
       <div class="field"><label>Buscar</label>
         <input type="search" id="ff-busca" placeholder="origem, destino, CIOT…"></div>
       <div class="spacer"></div>
+      <div class="field"><label>Visualização</label>
+        <div style="display:flex;gap:6px;">
+          <button class="btn btn-sm" id="btn-view-kanban" type="button">Kanban</button>
+          <button class="btn btn-sm" id="btn-view-tabela" type="button">Tabela</button>
+        </div>
+      </div>
       <button class="btn btn-primary" id="btn-novo-frete" disabled>+ Novo frete</button>
     </div>
-    <div id="fretes-tbl"><div class="empty">Carregando fretes do banco…</div></div>`;
+    <div id="fretes-conteudo"><div class="empty">Carregando fretes do banco…</div></div>`;
   }
 
-  function tabela() {
+  function atualizarToggleBtns() {
+    const bK = document.getElementById("btn-view-kanban");
+    const bT = document.getElementById("btn-view-tabela");
+    if (!bK || !bT) return;
+    bK.classList.toggle("btn-primary", state.viewMode === "kanban");
+    bT.classList.toggle("btn-primary", state.viewMode === "tabela");
+  }
+
+  function renderConteudo() {
     const fs = filtrar();
-    document.getElementById("frete-count").textContent =
-      `${fs.length} viagens · ${U.money(U.sum(fs, f => f.valor_frete))}`;
+    const cont = document.getElementById("frete-count");
+    if (cont) cont.textContent = `${fs.length} viagens · ${U.money(U.sum(fs, f => f.valor_frete))}`;
+    if (state.viewMode === "kanban") renderKanban(fs); else tabela(fs);
+  }
+
+  /* ---------------- Kanban ---------------- */
+
+  function cardHtml(f) {
+    return `
+    <div class="kanban-card" draggable="true" data-id="${f.id}">
+      <div class="kc-data">${U.dBR(f.data)}</div>
+      <div class="kc-rota">${U.esc(f.origem || "—")} → ${U.esc(f.destino || "—")}</div>
+      <div class="kc-mot">${U.esc(f.motoristas ? f.motoristas.nome : "—")}</div>
+      <div class="kc-foot">
+        <span class="kc-valor">${U.money(f.valor_frete)}</span>
+        ${U.statusTagFrete(f)}
+      </div>
+    </div>`;
+  }
+
+  function renderKanban(fs) {
+    const el = document.getElementById("fretes-conteudo");
+    if (!el) return;
+    if (state.erro) { el.innerHTML = `<div class="empty">${U.esc(state.erro)}</div>`; return; }
+    const board = STATUS_COLS.map(col => {
+      const itens = fs.filter(f => f.status_entrega === col.id)
+        .sort((a, b) => (b.data || "").localeCompare(a.data || ""));
+      const cards = itens.length ? itens.map(cardHtml).join("") : '<div class="kanban-empty">sem fretes</div>';
+      return `
+      <div class="kanban-col" data-status="${col.id}">
+        <div class="kanban-col-head">
+          <div class="kanban-col-titulo"><span class="kanban-col-dot"></span>${col.nome}</div>
+          <span class="count-pill">${itens.length}</span>
+        </div>
+        <div class="kanban-cards">${cards}</div>
+      </div>`;
+    }).join("");
+    el.innerHTML = `<div class="kanban-board">${board}</div>`;
+    bindKanbanEvents();
+  }
+
+  function bindKanbanEvents() {
+    document.querySelectorAll(".kanban-card").forEach(card => {
+      card.addEventListener("dragstart", e => {
+        card.classList.add("dragging");
+        e.dataTransfer.setData("text/plain", card.dataset.id);
+        e.dataTransfer.effectAllowed = "move";
+      });
+      card.addEventListener("dragend", () => card.classList.remove("dragging"));
+      card.addEventListener("click", () => detalhe(card.dataset.id));
+    });
+    document.querySelectorAll(".kanban-col").forEach(col => {
+      col.addEventListener("dragover", e => { e.preventDefault(); col.classList.add("drop-hover"); });
+      col.addEventListener("dragleave", () => col.classList.remove("drop-hover"));
+      col.addEventListener("drop", e => {
+        e.preventDefault();
+        col.classList.remove("drop-hover");
+        const freteId = e.dataTransfer.getData("text/plain");
+        if (freteId) moverStatus(freteId, col.dataset.status);
+      });
+    });
+  }
+
+  /* move otimista + grava no banco (LIVE.atualizarFrete já tem RLS liberado pra admin/operacional);
+     desfaz e avisa em caso de erro. Vale tanto pro drag quanto pros botões do modal de detalhe. */
+  async function moverStatus(freteId, novoStatus) {
+    const f = (state.dados || []).find(x => x.id === freteId);
+    if (!f || f.status_entrega === novoStatus) return;
+    const anterior = f.status_entrega;
+    f.status_entrega = novoStatus;
+    renderConteudo();
+    try {
+      const atualizado = await LIVE.atualizarFrete(freteId, { status_entrega: novoStatus });
+      substituirNoCache(atualizado);
+      renderConteudo();
+    } catch (e) {
+      f.status_entrega = anterior;
+      renderConteudo();
+      U.toast("Erro ao mover: " + (e.message || e));
+    }
+  }
+
+  /* ---------------- Tabela ---------------- */
+
+  function tabela(fs) {
+    const el = document.getElementById("fretes-conteudo");
+    if (!el) return;
     if (!fs.length) {
-      document.getElementById("fretes-tbl").innerHTML =
-        `<div class="empty">${state.erro ? U.esc(state.erro) : "Nenhum frete para os filtros."}</div>`;
+      el.innerHTML = `<div class="empty">${state.erro ? U.esc(state.erro) : "Nenhum frete para os filtros."}</div>`;
       return;
     }
     const visiveis = fs.slice(0, LIMITE_LISTA);
@@ -80,7 +192,7 @@
         <td>${f.ciot ? `<span class="mono">${U.esc(f.ciot)}</span>` : '<span class="tag tag-warn">sem CIOT</span>'}</td>
         <td>${U.statusTagFrete(f)}</td>
       </tr>`).join("");
-    document.getElementById("fretes-tbl").innerHTML = `
+    el.innerHTML = `
       <div class="table-wrap"><table class="tbl">
         <thead><tr>
           <th>Data</th><th>Origem / destino</th><th>Transportadora</th>
@@ -101,9 +213,47 @@
       ${fs.length > LIMITE_LISTA
         ? `<div class="legend-note">Mostrando as ${LIMITE_LISTA} viagens mais recentes de ${fs.length} — os totais acima somam todas. Refine os filtros para ver outras.</div>`
         : ""}`;
-    document.querySelectorAll("#fretes-tbl tr.clickable").forEach(tr => {
+    document.querySelectorAll("#fretes-conteudo tr.clickable").forEach(tr => {
       tr.onclick = () => detalhe(tr.dataset.id);
     });
+  }
+
+  /* ---------------- Modal de detalhe (kanban e tabela abrem o mesmo) ---------------- */
+
+  function statusBtnsHtml(f) {
+    return STATUS_COLS.map(c => `
+      <button class="btn btn-sm ${c.id === f.status_entrega ? "btn-primary" : ""}" data-status="${c.id}" type="button">${c.nome}</button>
+    `).join("");
+  }
+
+  function bindStatusBtns(freteId) {
+    const wrap = document.getElementById("fd-status-btns");
+    if (!wrap) return;
+    wrap.querySelectorAll("button").forEach(btn => {
+      btn.onclick = async () => {
+        await moverStatus(freteId, btn.dataset.status);
+        const f = state.dados.find(x => x.id === freteId);
+        if (!f || !document.getElementById("fd-status-btns")) return;
+        wrap.innerHTML = statusBtnsHtml(f);
+        bindStatusBtns(freteId);
+        carregarHistorico(freteId);
+      };
+    });
+  }
+
+  async function carregarHistorico(freteId) {
+    const el = document.getElementById("fd-historico");
+    if (!el) return;
+    el.textContent = "Carregando histórico…";
+    try {
+      const hist = await LIVE.historicoStatusFrete(freteId);
+      if (!hist.length) { el.innerHTML = ""; return; }
+      el.innerHTML = `<b>Histórico</b><br>${hist.map(h =>
+        `${h.status_anterior ? U.esc(nomeStatus(h.status_anterior)) + " → " : ""}${U.esc(nomeStatus(h.status_novo))} · ${U.dBR(h.alterado_em)} ${h.alterado_em.slice(11, 16)}`
+      ).join("<br>")}`;
+    } catch (e) {
+      el.innerHTML = "";
+    }
   }
 
   function detalhe(id) {
@@ -112,6 +262,10 @@
     U.openModal(`
       <h2>Frete ${U.dBRfull(f.data)}</h2>
       <div class="modal-sub">${U.esc(f.origem || "—")} → ${U.esc(f.destino || "—")}</div>
+      <div class="full" style="margin:14px 0 4px;">
+        <label style="font-size:11.5px;font-weight:700;color:var(--text-2);display:block;margin-bottom:6px;">Status da entrega</label>
+        <div id="fd-status-btns" style="display:flex;gap:6px;flex-wrap:wrap;">${statusBtnsHtml(f)}</div>
+      </div>
       <dl class="kv">
         <dt>Motorista</dt><dd>${U.esc(f.motoristas ? f.motoristas.nome : "—")} ${f.veiculos ? "· " + U.placaFmt(f.veiculos.placa) : ""}</dd>
         <dt>Transportadora</dt><dd>${U.esc(f.transportadora || "—")}</dd>
@@ -129,18 +283,21 @@
         <dt>Pagamento</dt><dd>${f.pagamento_realizado ? "recebido " + U.dBRfull(f.pagamento_realizado) : (f.pagamento_previsto ? "previsto " + U.dBRfull(f.pagamento_previsto) : "")} ${f.banco ? `· ${U.esc(f.banco)}` : ""} ${U.statusTagFrete(f)}</dd>
         ${f.observacao ? `<dt>Observação</dt><dd>${U.esc(f.observacao)}</dd>` : ""}
       </dl>
+      <div id="fd-historico" class="legend-note"></div>
       <div class="divider"></div>
       <div class="full" style="display:flex;gap:10px;justify-content:flex-end">
         ${!f.pagamento_realizado ? '<button class="btn" id="fd-recebido">Marcar como recebido</button>' : ""}
         <button class="btn btn-primary" id="fd-editar">Editar frete</button>
       </div>`);
+    bindStatusBtns(f.id);
+    carregarHistorico(f.id);
     const btnReceb = document.getElementById("fd-recebido");
     if (btnReceb) btnReceb.onclick = async () => {
       btnReceb.disabled = true; btnReceb.textContent = "Salvando…";
       try {
         const atualizado = await LIVE.atualizarFrete(f.id, { pagamento_realizado: HOJE });
         substituirNoCache(atualizado);
-        U.closeModal(); tabela();
+        U.closeModal(); renderConteudo();
         U.toast("Frete marcado como recebido.");
       } catch (e) {
         U.toast("Erro ao salvar: " + (e.message || e));
@@ -153,6 +310,31 @@
   function substituirNoCache(atualizado) {
     const i = state.dados.findIndex(x => x.id === atualizado.id);
     if (i >= 0) state.dados[i] = atualizado; else state.dados.unshift(atualizado);
+  }
+
+  /* ---------------- Realtime — sincroniza o kanban entre abas/usuários (patch_012) ---------------- */
+
+  function assinarRealtime() {
+    if (!window.sb || canalRealtime) return;
+    canalRealtime = window.sb
+      .channel("fretes-kanban")
+      .on("postgres_changes", { event: "*", schema: "public", table: "fretes" }, async (payload) => {
+        if (!state.dados) return;
+        try {
+          if (payload.eventType === "DELETE") {
+            state.dados = state.dados.filter(f => f.id !== payload.old.id);
+          } else {
+            const atualizado = await LIVE.fretePorId(payload.new.id);
+            substituirNoCache(atualizado);
+          }
+          renderConteudo();
+        } catch (e) { /* evento isolado não deveria travar a tela */ }
+      })
+      .subscribe();
+  }
+
+  function desassinarRealtime() {
+    if (canalRealtime) { window.sb.removeChannel(canalRealtime); canalRealtime = null; }
   }
 
   /* form único: sem "existente" = criar; com "existente" = editar (mesmos campos) */
@@ -273,7 +455,7 @@
         substituirNoCache(salvo);
         U.closeDrawer();
         preencherFiltros();
-        tabela();
+        renderConteudo();
         U.toast(ed ? "Frete atualizado." : "Frete lançado no banco.");
       } catch (e) {
         U.toast("Erro ao salvar: " + (e.message || e));
@@ -348,26 +530,30 @@
     }
     preencherFiltros();
     document.getElementById("btn-novo-frete").disabled = false;
-    tabela();
+    renderConteudo();
   }
 
   function bind() {
     const on = (id, ev, fn) => document.getElementById(id).addEventListener(ev, fn);
-    on("ff-mes", "change", e => { state.mes = e.target.value; tabela(); });
-    on("ff-mot", "change", e => { state.motoristaId = e.target.value; tabela(); });
-    on("ff-transp", "change", e => { state.transp = e.target.value; tabela(); });
-    on("ff-status", "change", e => { state.status = e.target.value; tabela(); });
-    on("ff-cat", "change", e => { state.categoriaId = e.target.value; tabela(); });
-    on("ff-busca", "input", e => { state.busca = e.target.value; tabela(); });
+    on("ff-mes", "change", e => { state.mes = e.target.value; renderConteudo(); });
+    on("ff-mot", "change", e => { state.motoristaId = e.target.value; renderConteudo(); });
+    on("ff-transp", "change", e => { state.transp = e.target.value; renderConteudo(); });
+    on("ff-status", "change", e => { state.status = e.target.value; renderConteudo(); });
+    on("ff-cat", "change", e => { state.categoriaId = e.target.value; renderConteudo(); });
+    on("ff-busca", "input", e => { state.busca = e.target.value; renderConteudo(); });
+    on("btn-view-kanban", "click", () => { state.viewMode = "kanban"; atualizarToggleBtns(); renderConteudo(); });
+    on("btn-view-tabela", "click", () => { state.viewMode = "tabela"; atualizarToggleBtns(); renderConteudo(); });
     on("btn-novo-frete", "click", () => formFrete(null));
+    atualizarToggleBtns();
     carregarRoteiroHoje();
     carregar();
+    assinarRealtime();
   }
 
   window.VIEWS = window.VIEWS || {};
   window.VIEWS.fretes = {
     title: "Fretes",
     sub: "Viagens lançadas, com valores e pagamento",
-    render: view, bind,
+    render: view, bind, teardown: desassinarRealtime,
   };
 })();

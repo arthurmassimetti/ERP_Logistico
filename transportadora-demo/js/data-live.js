@@ -85,6 +85,29 @@
     return data;
   };
 
+  /* busca 1 frete com os mesmos joins de sempre — usado pra reidratar uma linha
+     quando chega um evento de realtime (patch_012_kanban_status_frete.sql) */
+  LIVE.fretePorId = async function (id) {
+    const { data, error } = await window.sb
+      .from("fretes")
+      .select(SELECT_FRETE)
+      .eq("id", id)
+      .single();
+    if (error) throw error;
+    return data;
+  };
+
+  /* histórico de troca de status_entrega (kanban) — gravado por trigger, só leitura */
+  LIVE.historicoStatusFrete = async function (freteId) {
+    const { data, error } = await window.sb
+      .from("fretes_status_historico")
+      .select("*")
+      .eq("frete_id", freteId)
+      .order("alterado_em");
+    if (error) throw error;
+    return data;
+  };
+
   /* categorias de carga (lookup) — usado no form de fretes: só as ativas */
   LIVE.categoriasCarga = async function () {
     const { data, error } = await window.sb
