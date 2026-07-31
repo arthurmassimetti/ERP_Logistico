@@ -405,6 +405,36 @@
     return data;
   };
 
+  /* frota: registra troca de óleo — reseta km_troca (+intervalo do veículo), conta a troca e,
+     se pedido, quita o filtro de ar junto. Tudo via RPC transacional (patch_013). */
+  LIVE.registrarTrocaOleo = async function (placa, dados) {
+    const { data, error } = await window.sb.rpc("registrar_troca_oleo", {
+      p_placa: placa,
+      p_km_atual: dados.km_atual,
+      p_data: dados.data || null,
+      p_oficina: dados.oficina ?? null,
+      p_valor_oleo: dados.valor_oleo ?? null,
+      p_trocar_filtro_ar: !!dados.trocar_filtro_ar,
+      p_valor_filtro_ar: dados.valor_filtro_ar ?? null,
+    });
+    if (error) throw error;
+    return data;
+  };
+
+  /* frota: renova o tacógrafo (nova validade) e opcionalmente registra o custo (patch_013) */
+  LIVE.registrarRenovacaoTacografo = async function (placa, dados) {
+    const { data, error } = await window.sb.rpc("registrar_renovacao_tacografo", {
+      p_placa: placa,
+      p_nova_validade: dados.nova_validade,
+      p_observacao: dados.observacao ?? null,
+      p_data: dados.data || null,
+      p_oficina: dados.oficina ?? null,
+      p_valor: dados.valor ?? null,
+    });
+    if (error) throw error;
+    return data;
+  };
+
   /* manutenção: ordens de manutenção (fluxo de trabalho) — histórico de custo continua em "manutencoes" */
   const SELECT_ORDEM = "*, veiculos(placa,tipo,situacao)";
 
