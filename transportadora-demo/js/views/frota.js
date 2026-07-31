@@ -3,6 +3,7 @@
   const U = window.U;
 
   const state = { veiculos: [], motoristas: [], erro: null, scrollPara: null };
+  let canalRealtime = null;
 
   function oleoInfo(v) {
     if (!v.km_atual || !v.km_troca) return { html: '<span class="muted">sem registro</span>', cls: "" };
@@ -15,10 +16,19 @@
     return { html: tag, cls, pct: resta <= 0 ? 100 : pct };
   }
 
+  /* filtro de ar: regra combinada com o cliente — a cada N trocas de óleo (padrão 3, patch_013),
+     o filtro também precisa ser trocado. Contadores vêm do banco (nunca editados à mão). */
+  function filtroArDevido(v) {
+    const ciclo = v.intervalo_trocas_filtro_ar || 3;
+    const contador = v.troca_oleo_contador || 0;
+    const ref = v.filtro_ar_referencia_contador || 0;
+    return (contador - ref) >= ciclo;
+  }
+
   function statusGeral(v) {
     const oleoVencido = v.km_atual && v.km_troca - v.km_atual <= 0;
     const tacoVencido = v.tacografo_venc && U.diasAte(v.tacografo_venc) <= 0;
-    if (oleoVencido || tacoVencido) return '<span class="tag tag-danger">atenção</span>';
+    if (oleoVencido || tacoVencido || filtroArDevido(v)) return '<span class="tag tag-danger">atenção</span>';
     const oleoProx = v.km_atual && v.km_troca - v.km_atual < 10000;
     const tacoProx = v.tacografo_venc && U.diasAte(v.tacografo_venc) <= 45;
     if (oleoProx || tacoProx) return '<span class="tag tag-warn">próximo</span>';
@@ -60,6 +70,125 @@
       } catch (e) {
         U.toast("Erro ao salvar: " + (e.message || e));
         btn.disabled = false; btn.textContent = "Salvar";
+      }
+    };
+  }
+
+  /* --------------------------------------------------- registrar troca de óleo */
+  function proximaTrocaPreview(kmAtual, intervalo) {
+    const km = parseInt(kmAtual, 10);
+    if (isNaN(km)) return "—";
+    return U.num(km + intervalo) + " km";
+  }
+
+  function formTrocaOleo(v) {
+    const intervalo = v.intervalo_troca_oleo_km || 30000;
+    const ciclo = v.intervalo_trocas_filtro_ar || 3;
+    const refFiltro = v.filtro_ar_referencia_contador || 0;
+    const seraContador = (v.troca_oleo_contador || 0) + 1;
+    const filtroVenceAgora = (seraContador - refFiltro) >= ciclo;
+    const faltamParaFiltro = ciclo - (seraContador - refFiltro);
+
+    U.openDrawer({
+      titulo: `Registrar troca de óleo — ${U.placaFmt(v.placa)}`,
+      sub: `Essa será a troca nº ${seraContador}. Intervalo do veículo: a cada ${U.num(intervalo)} km.`,
+      corpo: `
+      <div class="form-grid">
+        <div><label>Km no momento da troca<span class="req">*</span></label>
+          <input type="number" id="to-km" min="${v.km_atual || 0}" value="${v.km_atual || ""}"></div>
+        <div><label>Data</label><input type="date" id="to-data" value="${U.hojeISO()}"></div>
+        <div><label>Oficina</label><input id="to-oficina" placeholder="opcional"></div>
+        <div><label>Valor do óleo (R$)</label><input type="number" id="to-valor" step="0.01" min="0" placeholder="opcional"></div>
+        <div class="full"><div class="legend-note">Próxima troca prevista: <b id="to-preview">${proximaTrocaPreview(v.km_atual, intervalo)}</b></div></div>
+        <div class="full">
+          <label class="check-inline">
+            <input type="checkbox" id="to-filtro" ${filtroVenceAgora ? "checked" : ""}>
+            Também trocar o filtro de ar
+          </label>
+          <div class="form-note">${filtroVenceAgora
+            ? `<span class="tag tag-warn">está na hora</span> — completa ${ciclo} trocas de óleo desde a última troca de filtro`
+            : `próxima troca de filtro daqui a ${faltamParaFiltro} troca(s) de óleo`}</div>
+        </div>
+        <div id="to-campo-valor-filtro" class="full" style="${filtroVenceAgora ? "" : "display:none"}">
+          <label>Valor do filtro de ar (R$)</label><input type="number" id="to-valor-filtro" step="0.01" min="0" placeholder="opcional">
+        </div>
+        <div class="full form-note"><span class="req">*</span> campo obrigatório</div>
+      </div>`,
+      rodape: `
+        <button class="btn" id="to-cancel">Cancelar</button>
+        <button class="btn btn-primary" id="to-save">Registrar troca</button>`,
+    });
+
+    document.getElementById("to-km").oninput = e => {
+      document.getElementById("to-preview").textContent = proximaTrocaPreview(e.target.value, intervalo);
+    };
+    document.getElementById("to-filtro").onchange = e => {
+      document.getElementById("to-campo-valor-filtro").style.display = e.target.checked ? "" : "none";
+    };
+    document.getElementById("to-cancel").onclick = U.closeDrawer;
+    document.getElementById("to-save").onclick = async () => {
+      const km_atual = parseInt(document.getElementById("to-km").value, 10);
+      if (isNaN(km_atual)) { U.toast("Informe o km da troca."); return; }
+      if (v.km_atual && km_atual < v.km_atual) { U.toast("O km informado não pode ser menor que o km atual do veículo."); return; }
+      const btn = document.getElementById("to-save");
+      btn.disabled = true; btn.textContent = "Salvando…";
+      try {
+        await LIVE.registrarTrocaOleo(v.placa, {
+          km_atual,
+          data: document.getElementById("to-data").value || null,
+          oficina: document.getElementById("to-oficina").value.trim() || null,
+          valor_oleo: parseFloat(document.getElementById("to-valor").value) || null,
+          trocar_filtro_ar: document.getElementById("to-filtro").checked,
+          valor_filtro_ar: parseFloat(document.getElementById("to-valor-filtro").value) || null,
+        });
+        U.closeDrawer();
+        U.toast("Troca de óleo registrada.");
+        carregar();
+      } catch (e) {
+        U.toast("Erro ao salvar: " + (e.message || e));
+        btn.disabled = false; btn.textContent = "Registrar troca";
+      }
+    };
+  }
+
+  /* --------------------------------------------------- renovar tacógrafo */
+  function formTacografo(v) {
+    U.openDrawer({
+      titulo: `Renovar tacógrafo — ${U.placaFmt(v.placa)}`,
+      sub: v.tacografo_venc ? `Vencimento atual: ${U.dBRfull(v.tacografo_venc)}` : "Sem vencimento registrado.",
+      corpo: `
+      <div class="form-grid">
+        <div><label>Nova validade<span class="req">*</span></label><input type="date" id="tc-venc"></div>
+        <div><label>Observação</label><input id="tc-obs" value="${U.esc(v.tacografo_obs || "")}" placeholder="opcional"></div>
+        <div><label>Data da renovação</label><input type="date" id="tc-data" value="${U.hojeISO()}"></div>
+        <div><label>Oficina</label><input id="tc-oficina" placeholder="opcional"></div>
+        <div><label>Valor (R$)</label><input type="number" id="tc-valor" step="0.01" min="0" placeholder="opcional"></div>
+        <div class="full form-note"><span class="req">*</span> campo obrigatório</div>
+      </div>`,
+      rodape: `
+        <button class="btn" id="tc-cancel">Cancelar</button>
+        <button class="btn btn-primary" id="tc-save">Salvar renovação</button>`,
+    });
+    document.getElementById("tc-cancel").onclick = U.closeDrawer;
+    document.getElementById("tc-save").onclick = async () => {
+      const nova_validade = document.getElementById("tc-venc").value;
+      if (!nova_validade) { U.toast("Informe a nova validade."); return; }
+      const btn = document.getElementById("tc-save");
+      btn.disabled = true; btn.textContent = "Salvando…";
+      try {
+        await LIVE.registrarRenovacaoTacografo(v.placa, {
+          nova_validade,
+          observacao: document.getElementById("tc-obs").value.trim() || null,
+          data: document.getElementById("tc-data").value || null,
+          oficina: document.getElementById("tc-oficina").value.trim() || null,
+          valor: parseFloat(document.getElementById("tc-valor").value) || null,
+        });
+        U.closeDrawer();
+        U.toast("Tacógrafo renovado.");
+        carregar();
+      } catch (e) {
+        U.toast("Erro ao salvar: " + (e.message || e));
+        btn.disabled = false; btn.textContent = "Salvar renovação";
       }
     };
   }
@@ -197,6 +326,7 @@
   function card(v, mf) {
     const oleo = oleoInfo(v);
     const consumoBad = v.media_kml && v.media_kml < mf * 0.95;
+    const filtroDevido = filtroArDevido(v);
     return `
     <div class="fleet-card" id="veic-${v.placa}">
       <div class="fleet-head">
@@ -213,6 +343,7 @@
         <div class="fleet-row"><span class="lbl">Próxima troca de óleo</span><span class="val">${v.km_troca ? U.num(v.km_troca) + " km" : "—"}</span></div>
         <div class="fleet-row"><span class="lbl">Situação do óleo</span><span class="val">${oleo.html}</span></div>
         ${oleo.pct !== undefined ? `<div class="prog ${oleo.cls}"><i style="width:${oleo.pct}%"></i></div>` : ""}
+        ${filtroDevido ? `<div class="fleet-row"><span class="lbl">Filtro de ar</span><span class="val"><span class="tag tag-warn">trocar na próxima troca de óleo</span></span></div>` : ""}
         <div class="fleet-row"><span class="lbl">Média de consumo</span>
           <span class="val">${v.media_kml ? U.num(v.media_kml, 3) + " km/l" : "—"}
           ${consumoBad ? '<span class="tag tag-warn">abaixo da frota</span>' : ""}</span></div>
@@ -221,6 +352,8 @@
         <div class="fleet-row"><span class="lbl">ANTT</span><span class="val">${v.antt_empresa ? U.esc(v.antt_empresa) : "—"}${v.antt_numero ? " · " + U.esc(v.antt_numero) : ""}</span></div>
       </div>
       <div class="fleet-foot">
+        <button class="btn btn-sm" data-troca-oleo="${v.placa}" type="button">Registrar troca de óleo</button>
+        <button class="btn btn-sm" data-tacografo="${v.placa}" type="button">Renovar tacógrafo</button>
         <button class="btn btn-sm" data-situacao="${v.placa}" type="button">Alterar situação</button>
         <button class="btn btn-sm" data-editar-veiculo="${v.placa}" type="button">Editar veículo</button>
         <a class="btn btn-sm btn-ghost" href="#/manutencoes?placa=${v.placa}">Manutenções →</a>
@@ -270,10 +403,24 @@
           ${cavalos.filter(v => v.km_atual && v.km_troca - v.km_atual <= 0).length}</div></div>
       <div class="kpi"><div class="kpi-label">${U.icons.doc} Tacógrafos vencidos / hoje</div>
         <div class="kpi-value neg">${cavalos.filter(v => v.tacografo_venc && U.diasAte(v.tacografo_venc) <= 0).length}</div></div>
+      <div class="kpi"><div class="kpi-label">${U.icons.alert} Filtro de ar pendente</div>
+        <div class="kpi-value ${cavalos.some(filtroArDevido) ? "neg" : ""}">${cavalos.filter(filtroArDevido).length}</div></div>
       <div class="kpi"><div class="kpi-label">${U.icons.gauge} Média da frota</div>
         <div class="kpi-value">${U.num(mf, 3)} km/l</div></div>`;
 
     grid.innerHTML = cavalos.map(v => card(v, mf)).join("") || '<div class="empty">Nenhum cavalo cadastrado.</div>';
+    grid.querySelectorAll("[data-troca-oleo]").forEach(btn => {
+      btn.onclick = () => {
+        const v = state.veiculos.find(x => x.placa === btn.dataset.trocaOleo);
+        if (v) formTrocaOleo(v);
+      };
+    });
+    grid.querySelectorAll("[data-tacografo]").forEach(btn => {
+      btn.onclick = () => {
+        const v = state.veiculos.find(x => x.placa === btn.dataset.tacografo);
+        if (v) formTacografo(v);
+      };
+    });
     grid.querySelectorAll("[data-situacao]").forEach(btn => {
       btn.onclick = () => {
         const v = state.veiculos.find(x => x.placa === btn.dataset.situacao);
@@ -331,16 +478,34 @@
     renderTudo();
   }
 
+  /* ---------------- Realtime — sincroniza a tela entre abas/usuários (mesma mecânica do
+     Kanban de fretes, patch_013 liga "veiculos" à publicação). Reaproveita carregar() inteiro
+     em vez de remendar 1 linha: a lista de frota é pequena, não compensa a complexidade. */
+  function assinarRealtime() {
+    if (!window.sb || canalRealtime) return;
+    canalRealtime = window.sb
+      .channel("frota-realtime")
+      .on("postgres_changes", { event: "*", schema: "public", table: "veiculos" }, () => {
+        carregar();
+      })
+      .subscribe();
+  }
+
+  function desassinarRealtime() {
+    if (canalRealtime) { window.sb.removeChannel(canalRealtime); canalRealtime = null; }
+  }
+
   function bind(params) {
     state.scrollPara = params && params.placa;
     document.getElementById("btn-novo-veiculo").onclick = () => formVeiculo(null);
     carregar().then(() => { document.getElementById("btn-novo-veiculo").disabled = false; });
+    assinarRealtime();
   }
 
   window.VIEWS = window.VIEWS || {};
   window.VIEWS.frota = {
     title: "Frota",
     sub: "Quilometragem, troca de óleo, tacógrafo, MCT e ANTT",
-    render: view, bind,
+    render: view, bind, teardown: desassinarRealtime,
   };
 })();
