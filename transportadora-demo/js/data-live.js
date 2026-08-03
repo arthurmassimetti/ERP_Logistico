@@ -138,6 +138,44 @@
     return data;
   };
 
+  /* clientes: ativos (dropdown do formulário de frete) e todos (tela de cadastro) */
+  LIVE.clientes = async function () {
+    const { data, error } = await window.sb.from("clientes").select("*").eq("ativo", true).order("nome");
+    if (error) throw error;
+    return data;
+  };
+
+  LIVE.todosClientes = async function () {
+    const { data, error } = await window.sb.from("clientes").select("*").order("nome");
+    if (error) throw error;
+    return data;
+  };
+
+  LIVE.criarCliente = async function (dados) {
+    const { data, error } = await window.sb.from("clientes").insert(dados).select().single();
+    if (error) throw error;
+    return data;
+  };
+
+  LIVE.atualizarCliente = async function (id, dados) {
+    const { data, error } = await window.sb.from("clientes").update(dados).eq("id", id).select().single();
+    if (error) throw error;
+    return data;
+  };
+
+  /* empresa: linha única (id=1) com os dados cadastrais — só admin lê/edita (RLS) */
+  LIVE.empresa = async function () {
+    const { data, error } = await window.sb.from("empresa").select("*").eq("id", 1).single();
+    if (error) throw error;
+    return data;
+  };
+
+  LIVE.atualizarEmpresa = async function (dados) {
+    const { data, error } = await window.sb.from("empresa").update(dados).eq("id", 1).select().single();
+    if (error) throw error;
+    return data;
+  };
+
   /* roteiro: busca uma janela de dias (padrão: de 3 dias atrás até 14 dias à frente) */
   LIVE.roteiro = async function (deISO, ateISO) {
     let q = window.sb.from("roteiro").select("*, motoristas(nome)").order("data");
@@ -175,12 +213,6 @@
   LIVE.motoristaPorId = async function (id) {
     const { data, error } = await window.sb
       .from("motoristas").select("*, veiculos(placa), perfis(user_id,papel)").eq("id", id).single();
-    if (error) throw error;
-    return data;
-  };
-
-  LIVE.criarMotorista = async function (dados) {
-    const { data, error } = await window.sb.from("motoristas").insert(dados).select().single();
     if (error) throw error;
     return data;
   };
@@ -226,21 +258,54 @@
     return data;
   };
 
-  /* cria login + perfil via Edge Function (precisa da chave secreta, por isso não roda no navegador puro).
+  /* primeiro acesso do motorista — a RPC resolve o motorista_id sozinha a partir de quem está logado */
+  LIVE.concluirPrimeiroAcesso = async function (dados) {
+    const { data, error } = await window.sb.rpc("concluir_primeiro_acesso", {
+      p_telefone: dados.telefone,
+      p_cnh: dados.cnh,
+      p_cnh_categoria: dados.cnh_categoria,
+      p_cnh_validade: dados.cnh_validade,
+      p_endereco: dados.endereco,
+      p_cidade: dados.cidade,
+      p_uf: dados.uf,
+      p_cep: dados.cep,
+      p_contato_emergencia_nome: dados.contato_emergencia_nome,
+      p_contato_emergencia_telefone: dados.contato_emergencia_telefone,
+      p_nome: dados.nome ?? null,
+      p_data_nascimento: dados.data_nascimento || null,
+      p_rg: dados.rg ?? null,
+    });
+    if (error) throw error;
+    return data;
+  };
+
+  /* tour guiado — "concluido" (terminou/pediu pra ver de novo) ou "cancelado" (pulou) */
+  LIVE.registrarTourMotorista = async function (status) {
+    const { error } = await window.sb.rpc("registrar_tour_motorista", { p_status: status });
+    if (error) throw error;
+  };
+
+  /* gestão de usuários via Edge Function (precisa da chave secreta, por isso não roda no navegador puro).
      A função foi deployada no Supabase com o nome "dynamic-processor" (nome sugerido pelo dashboard
      na hora do deploy) — o código dela é o de supabase/functions/admin-usuarios/index.ts. */
-  LIVE.criarUsuario = async function (dados) {
-    const { data, error } = await window.sb.functions.invoke("dynamic-processor", { body: dados });
+  async function chamarAdminUsuarios(corpo) {
+    const { data, error } = await window.sb.functions.invoke("dynamic-processor", { body: corpo });
     if (error) {
       let msg = error.message || String(error);
       if (error.context && typeof error.context.json === "function") {
-        try { const corpo = await error.context.json(); if (corpo && corpo.error) msg = corpo.error; } catch (_) {}
+        try { const c = await error.context.json(); if (c && c.error) msg = c.error; } catch (_) {}
       }
       throw new Error(msg);
     }
     if (data && data.error) throw new Error(data.error);
     return data;
-  };
+  }
+
+  LIVE.criarUsuario = (dados) => chamarAdminUsuarios(dados);
+  LIVE.listarUsuarios = async () => (await chamarAdminUsuarios({ acao: "listar" })).usuarios;
+  LIVE.atualizarUsuario = (user_id, dados) => chamarAdminUsuarios({ acao: "atualizar", user_id, ...dados });
+  LIVE.resetarSenhaUsuario = (user_id, nova_senha) => chamarAdminUsuarios({ acao: "resetar_senha", user_id, nova_senha });
+  LIVE.excluirUsuario = (user_id) => chamarAdminUsuarios({ acao: "excluir", user_id });
 
   /* financeiro: contas a pagar avulsas — cacheado (igual motoristas/veiculos); toda escrita invalida */
   let cacheContasPagar = null;

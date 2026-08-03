@@ -9,6 +9,7 @@
       { id: "fretes", rotulo: "Fretes" },
       { id: "piso", rotulo: "Piso mínimo ANTT" },
       { id: "categorias", rotulo: "Categoria de carga" },
+      { id: "clientes", rotulo: "Clientes" },
       { id: "relatorios", rotulo: "Relatório de operação" },
     ] },
     { id: "financeiro-grupo", rotulo: "Financeiro", icone: "cash", itens: [
@@ -24,6 +25,10 @@
       { id: "ocorrencias", rotulo: "Ocorrências" },
     ] },
     { id: "motoristas", rotulo: "Motoristas", icone: "users" },
+    { id: "admin-grupo", rotulo: "Administração", icone: "settings", itens: [
+      { id: "empresa", rotulo: "Dados da empresa" },
+      { id: "usuarios", rotulo: "Usuários e acessos" },
+    ] },
   ];
 
   let atual = null;

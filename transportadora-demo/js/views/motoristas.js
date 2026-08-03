@@ -1,4 +1,6 @@
-/* Motoristas — cadastro base, extrato individual e vínculo de login (dados vivos do Supabase). */
+/* Motoristas — gestão de quem já existe (editar dados, extrato, veículo). Sem
+   criação: motorista novo e vínculo de login nascem juntos em Usuários e
+   acessos (Novo acesso), de propósito — evita ter cadastro sem login. */
 (function () {
   const U = window.U;
   const LIMITE_EXTRATO = 30;
@@ -38,12 +40,6 @@
 
   const state = { busca: "", mostrarInativos: false, dados: null, erro: null };
 
-  function gerarSenha() {
-    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$%";
-    let s = ""; for (let i = 0; i < 12; i++) s += chars[Math.floor(Math.random() * chars.length)];
-    return s;
-  }
-
   function filtrar() {
     if (!state.dados) return [];
     return state.dados.filter(m => {
@@ -57,7 +53,7 @@
   }
 
   function tagLogin(m) {
-    const perfil = (m.perfis || [])[0];
+    const perfil = Array.isArray(m.perfis) ? m.perfis[0] : m.perfis || null;
     if (!perfil) return '<span class="tag tag-neutro">sem login</span>';
     return `<span class="tag tag-ok">${U.esc(rotuloPapel(perfil.papel))}</span>`;
   }
@@ -68,10 +64,9 @@
     <div class="filters">
       <div class="field"><label>Buscar</label><input type="search" id="mf-busca" placeholder="nome ou CPF…"></div>
       <div class="field"><label class="check-inline"><input type="checkbox" id="mf-inativos"> mostrar inativos</label></div>
-      <div class="spacer"></div>
-      <button class="btn btn-primary" id="btn-novo-motorista" disabled>+ Motorista</button>
     </div>
-    <div id="mot-tbl"><div class="empty">Carregando motoristas…</div></div>`;
+    <div id="mot-tbl"><div class="empty">Carregando motoristas…</div></div>
+    <div class="legend-note">Motorista novo se cadastra junto com o login, em <a href="#/usuarios">Usuários e acessos</a> → Novo acesso.</div>`;
   }
 
   function tabela() {
@@ -101,12 +96,11 @@
     });
   }
 
-  /* ---------------------------------------------------------- form cadastro */
+  /* ------------------------------------------------------------ editar dados */
   function formMotorista(existente) {
-    const ed = !!existente;
-    const g = (c, d) => ed ? (existente[c] ?? d) : d;
+    const g = (c, d) => existente[c] ?? d;
     U.openDrawer({
-      titulo: ed ? "Editar motorista" : "Novo motorista",
+      titulo: "Editar motorista",
       corpo: `
       <div class="form-grid">
         <div class="full"><label>Nome<span class="req">*</span></label><input id="mform-nome" value="${U.esc(g("nome", ""))}" placeholder="nome completo"></div>
@@ -119,11 +113,18 @@
         <div><label>Disponibilidade</label><select id="mform-disp">
           ${DISPONIBILIDADES.map(d => `<option value="${d.v}" ${g("disponibilidade", "disponivel") === d.v ? "selected" : ""}>${d.r}</option>`).join("")}
         </select></div>
+        <div><label>Data de nascimento</label><input type="date" id="mform-nasc" value="${g("data_nascimento", "") || ""}"></div>
+        <div class="full"><label>Endereço</label><input id="mform-endereco" value="${U.esc(g("endereco", "") || "")}" placeholder="rua, número, bairro"></div>
+        <div><label>Cidade</label><input id="mform-cidade" value="${U.esc(g("cidade", "") || "")}"></div>
+        <div><label>UF</label><input id="mform-uf" maxlength="2" style="text-transform:uppercase" value="${U.esc(g("uf", "") || "")}"></div>
+        <div><label>CEP</label><input id="mform-cep" value="${U.esc(g("cep", "") || "")}"></div>
+        <div><label>Contato de emergência — nome</label><input id="mform-emerg-nome" value="${U.esc(g("contato_emergencia_nome", "") || "")}"></div>
+        <div><label>Contato de emergência — telefone</label><input id="mform-emerg-tel" value="${U.esc(g("contato_emergencia_telefone", "") || "")}"></div>
         <div class="full form-note"><span class="req">*</span> campo obrigatório</div>
       </div>`,
       rodape: `
         <button class="btn" id="mform-cancel">Cancelar</button>
-        <button class="btn btn-primary" id="mform-save">${ed ? "Salvar alterações" : "Cadastrar motorista"}</button>`,
+        <button class="btn btn-primary" id="mform-save">Salvar alterações</button>`,
     });
     document.getElementById("mform-cancel").onclick = U.closeDrawer;
     document.getElementById("mform-save").onclick = async () => {
@@ -136,21 +137,24 @@
         cnh_categoria: val("mform-cnh-cat") || null,
         cnh_validade: document.getElementById("mform-cnh-val").value || null,
         disponibilidade: document.getElementById("mform-disp").value,
+        data_nascimento: document.getElementById("mform-nasc").value || null,
+        endereco: val("mform-endereco") || null,
+        cidade: val("mform-cidade") || null,
+        uf: val("mform-uf").toUpperCase() || null,
+        cep: val("mform-cep") || null,
+        contato_emergencia_nome: val("mform-emerg-nome") || null,
+        contato_emergencia_telefone: val("mform-emerg-tel") || null,
       };
       const btn = document.getElementById("mform-save");
       btn.disabled = true; btn.textContent = "Salvando…";
       try {
-        if (ed) {
-          await LIVE.atualizarMotorista(existente.id, payload);
-        } else {
-          await LIVE.criarMotorista(payload);
-        }
+        await LIVE.atualizarMotorista(existente.id, payload);
         U.closeDrawer();
-        U.toast(ed ? "Motorista atualizado." : "Motorista cadastrado.");
+        U.toast("Motorista atualizado.");
         window.APP.rerender();
       } catch (e) {
         U.toast("Erro ao salvar: " + (e.message || e));
-        btn.disabled = false; btn.textContent = ed ? "Salvar alterações" : "Cadastrar motorista";
+        btn.disabled = false; btn.textContent = "Salvar alterações";
       }
     };
   }
@@ -163,48 +167,6 @@
     } catch (e) {
       U.toast("Erro: " + (e.message || e));
     }
-  }
-
-  /* --------------------------------------------------- vincular login */
-  function formVincularLogin(m) {
-    const senhaInicial = gerarSenha();
-    U.openDrawer({
-      titulo: "Vincular login",
-      sub: `Cria o acesso de ${U.esc(m.nome)} ao sistema, com um nível de permissão.`,
-      corpo: `
-      <div class="form-grid">
-        <div class="full"><label>E-mail<span class="req">*</span></label><input id="vl-email" type="email" placeholder="motorista@phorteaguiar.com.br"></div>
-        <div class="full"><label>Senha temporária<span class="req">*</span></label>
-          <div class="login-senha"><input id="vl-senha" value="${senhaInicial}"><button type="button" id="vl-gerar" tabindex="-1">gerar outra</button></div>
-        </div>
-        <div class="full"><label>Nível de permissão</label><select id="vl-papel">
-          ${PAPEIS.map(p => `<option value="${p.v}" ${p.v === "motorista" ? "selected" : ""}>${p.r}</option>`).join("")}
-        </select></div>
-        <div class="full form-note"><span class="req">*</span> campo obrigatório · anote e entregue essas credenciais ao motorista — a senha não pode ser recuperada depois daqui.</div>
-      </div>`,
-      rodape: `
-        <button class="btn" id="vl-cancel">Cancelar</button>
-        <button class="btn btn-primary" id="vl-save">Criar login</button>`,
-    });
-    document.getElementById("vl-gerar").onclick = () => { document.getElementById("vl-senha").value = gerarSenha(); };
-    document.getElementById("vl-cancel").onclick = U.closeDrawer;
-    document.getElementById("vl-save").onclick = async () => {
-      const email = document.getElementById("vl-email").value.trim();
-      const senha = document.getElementById("vl-senha").value;
-      const papel = document.getElementById("vl-papel").value;
-      if (!email || senha.length < 8) { U.toast("Informe um e-mail e uma senha com pelo menos 8 caracteres."); return; }
-      const btn = document.getElementById("vl-save");
-      btn.disabled = true; btn.textContent = "Criando…";
-      try {
-        await LIVE.criarUsuario({ email, senha, nome: m.nome, papel, motorista_id: m.id });
-        U.closeDrawer();
-        U.toast("Login criado: " + email);
-        window.APP.rerender();
-      } catch (e) {
-        U.toast("Erro ao criar login: " + (e.message || e));
-        btn.disabled = false; btn.textContent = "Criar login";
-      }
-    };
   }
 
   /* --------------------------------------------------- lançar vale (adiantamento) */
@@ -278,7 +240,7 @@
     };
     const mesAtual = HOJE.slice(0, 7);
     const resumo = resumoMes(fretes, vales, mesAtual);
-    const perfil = (m.perfis || [])[0];
+    const perfil = Array.isArray(m.perfis) ? m.perfis[0] : m.perfis || null;
 
     alvo.innerHTML = `
       <div class="grid-2">
@@ -292,6 +254,9 @@
             <dt>CNH</dt><dd>${U.esc(m.cnh || "—")}${m.cnh_categoria ? " · categoria " + U.esc(m.cnh_categoria) : ""}</dd>
             <dt>Validade da CNH</dt><dd>${m.cnh_validade ? U.vencTag(m.cnh_validade) : "—"}</dd>
             <dt>Telefone</dt><dd>${U.esc(m.telefone || "—")}</dd>
+            <dt>Data de nascimento</dt><dd>${m.data_nascimento ? U.dBRfull(m.data_nascimento) : "—"}</dd>
+            <dt>Endereço</dt><dd>${U.esc(m.endereco || "—")}${m.cidade ? " · " + U.esc(m.cidade) : ""}${m.uf ? "/" + U.esc(m.uf) : ""}${m.cep ? " · CEP " + U.esc(m.cep) : ""}</dd>
+            <dt>Contato de emergência</dt><dd>${U.esc(m.contato_emergencia_nome || "—")}${m.contato_emergencia_telefone ? " · " + U.esc(m.contato_emergencia_telefone) : ""}</dd>
             <dt>Veículo vinculado</dt><dd><select id="md-veiculo" class="select-sm">
               <option value="">sem veículo</option>
               ${cavalos.map(v => {
@@ -302,12 +267,11 @@
             <dt>Disponibilidade</dt><dd><select id="md-disp" class="select-sm">
               ${DISPONIBILIDADES.map(d => `<option value="${d.v}" ${(m.disponibilidade || "disponivel") === d.v ? "selected" : ""}>${d.r}</option>`).join("")}
             </select></dd>
-            <dt>Login</dt><dd>${perfil ? `criado · nível <b>${U.esc(rotuloPapel(perfil.papel))}</b>` : "sem login vinculado"}</dd>
+            <dt>Login</dt><dd>${perfil ? `criado · nível <b>${U.esc(rotuloPapel(perfil.papel))}</b>` : '<span class="muted">sem login</span> · <a href="#/usuarios">criar em Usuários e acessos →</a>'}</dd>
           </dl>
           <div class="mt" style="display:flex;gap:8px;flex-wrap:wrap">
             <button class="btn btn-sm" id="md-editar">Editar dados</button>
             <button class="btn btn-sm" id="md-ativo">${m.ativo ? "Desativar" : "Reativar"}</button>
-            ${!perfil ? '<button class="btn btn-sm btn-primary" id="md-login">Vincular login</button>' : ""}
           </div>
         </div>
         <div>
@@ -389,8 +353,6 @@
       }
     };
     document.getElementById("md-vale").onclick = () => formVale(m);
-    const btnLogin = document.getElementById("md-login");
-    if (btnLogin) btnLogin.onclick = () => formVincularLogin(m);
   }
 
   /* ---------------------------------------------------------------- carga */
@@ -408,14 +370,13 @@
   function bind() {
     document.getElementById("mf-busca").addEventListener("input", e => { state.busca = e.target.value; tabela(); });
     document.getElementById("mf-inativos").addEventListener("change", e => { state.mostrarInativos = e.target.checked; tabela(); });
-    document.getElementById("btn-novo-motorista").addEventListener("click", () => formMotorista(null));
-    recarregarLista().then(() => { document.getElementById("btn-novo-motorista").disabled = false; });
+    recarregarLista();
   }
 
   window.VIEWS = window.VIEWS || {};
   window.VIEWS.motoristas = {
     title: "Motoristas",
-    sub: "Cadastro, extrato e acesso ao sistema",
+    sub: "Dados, extrato e vínculo com veículo — cadastro novo nasce em Usuários e acessos",
     tituloDetalhe: "Motoristas · extrato",
     render: view, bind,
     detalhe, bindDetalhe,
