@@ -165,6 +165,8 @@ input, select, textarea { font-family: inherit; font-size: 14px; }
 .btn-sm { padding: 5px 10px; font-size: 12px; }
 .btn-primary { background: var(--primary); border-color: var(--primary); color: #fff; }
 .btn-primary:hover { background: var(--primary-dark); color: #fff; }
+.btn-danger { background: var(--danger); border-color: var(--danger); color: #fff; }
+.btn-danger:hover { background: #a02525; border-color: #a02525; color: #fff; }
 .btn-ghost { border-color: transparent; background: transparent; color: var(--primary); }
 .btn-ghost:hover { background: var(--primary-soft); }
 
@@ -480,6 +482,12 @@ tr.highlight-row { animation: rowflash 2.4s ease-out; }
 .mot-top-name { font-weight: 700; font-size: 14.5px; }
 .mot-top-sub { font-size: 11px; color: #94a3b8; }
 .mot-top .btn-sair { margin-left: auto; }
+.btn-ajuda {
+  border: 1px solid #2a3850; background: transparent; color: #94a3b8;
+  font-size: 12px; font-weight: 700; width: 26px; height: 26px; border-radius: 50%; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+}
+.btn-ajuda:hover { background: #182135; color: #fff; }
 .mot-content { padding: 16px 16px 40px; display: flex; flex-direction: column; gap: 16px; flex: 1; }
 .mot-secao-titulo { font-size: 12px; font-weight: 700; color: var(--text-2); text-transform: uppercase; letter-spacing: .05em; }
 .mot-card {
@@ -516,6 +524,26 @@ tr.highlight-row { animation: rowflash 2.4s ease-out; }
 /* avisos de estado (sem veículo, checklist já enviado, etc.) */
 .mot-aviso { background: var(--warn-bg); color: var(--warn); border-radius: 12px; padding: 16px; font-size: 14px; font-weight: 600; text-align: center; }
 .mot-confirma { background: var(--ok-bg); color: var(--ok); border-radius: 12px; padding: 18px; text-align: center; font-weight: 700; font-size: 15px; }
+
+/* tour guiado — cartão colado acima da tabbar (que fica visível, sem escurecer) +
+   anel de destaque na aba que o passo atual está explicando */
+.tour-backdrop { position: fixed; inset: 0; bottom: 62px; background: rgba(16,24,40,.55); z-index: 25; }
+.tour-card {
+  position: fixed; left: 12px; right: 12px; bottom: 74px; z-index: 26;
+  background: var(--surface); border-radius: 14px; padding: 18px; box-shadow: 0 -6px 30px rgba(0,0,0,.25);
+  max-width: 456px; margin: 0 auto;
+}
+.tour-passo { font-size: 11px; font-weight: 700; color: var(--text-3); text-transform: uppercase; letter-spacing: .05em; }
+.tour-titulo { font-size: 16px; font-weight: 700; margin: 4px 0 6px; }
+.tour-texto { font-size: 13.5px; color: var(--text-2); line-height: 1.4; }
+.tour-nav { display: flex; gap: 8px; margin-top: 16px; align-items: center; }
+.tour-pular { background: none; border: none; color: var(--text-3); font-size: 12.5px; font-weight: 600; padding: 8px 4px; }
+.mot-tab-btn.tour-destaque { color: var(--primary); position: relative; z-index: 27; }
+.mot-tab-btn.tour-destaque::before {
+  content: ""; position: absolute; inset: 2px 6px; border-radius: 10px;
+  box-shadow: 0 0 0 3px var(--primary-soft), 0 0 0 1.5px var(--primary); background: var(--surface);
+}
+.mot-tab-btn.tour-destaque svg, .mot-tab-btn.tour-destaque span { position: relative; z-index: 1; }
 
 /* checklist — item com dois botões grandes: OK / Problema */
 .chk-item { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; margin-bottom: 10px; }

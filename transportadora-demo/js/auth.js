@@ -29,9 +29,14 @@
     try {
       const { data: perfil } = await sb
         .from("perfis")
-        .select("nome,papel")
+        .select("nome,papel,ativo")
         .eq("user_id", user.id)
         .single();
+      if (perfil && perfil.ativo === false) {
+        await sb.auth.signOut();
+        location.replace("login.html?desativado=1");
+        return;
+      }
       if (perfil) { rotulo = perfil.nome; papel = perfil.papel; }
     } catch (_) { /* sem perfil cadastrado: mostra o e-mail mesmo */ }
 

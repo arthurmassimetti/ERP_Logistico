@@ -30,6 +30,15 @@
   ];
   const URGENCIAS = [{ v: "baixa", r: "Baixa" }, { v: "media", r: "Média" }, { v: "alta", r: "Alta" }];
 
+  const CNH_CATEGORIAS = ["A", "B", "AB", "C", "D", "E", "AC", "AD", "AE"];
+
+  const TOUR_PASSOS = [
+    { aba: "inicio", titulo: "Início", texto: "Aqui você vê alertas importantes, a tarefa de hoje e o resumo do seu acerto do mês." },
+    { aba: "viagens", titulo: "Viagens", texto: "Suas próximas tarefas programadas e o histórico de viagens já realizadas." },
+    { aba: "checklist", titulo: "Checklist", texto: "Envie o checklist do veículo antes de cada viagem — pneus, freios, óleo e mais." },
+    { aba: "problema", titulo: "Relatar", texto: "Percebeu algo errado no veículo? Relate aqui pra equipe de frota avaliar." },
+  ];
+
   const state = {
     aba: "inicio",
     perfil: null, motorista: null, veiculo: null,
@@ -382,6 +391,187 @@
     }
   }
 
+  /* ================================================================ primeiro acesso (obrigatório) */
+  function renderEsqueletoAbas() {
+    document.getElementById("mot-main").innerHTML = `
+      <section id="aba-inicio" class="mot-aba"><div class="empty">Carregando…</div></section>
+      <section id="aba-viagens" class="mot-aba" hidden></section>
+      <section id="aba-checklist" class="mot-aba" hidden></section>
+      <section id="aba-problema" class="mot-aba" hidden></section>`;
+  }
+
+  function renderPrimeiroAcesso() {
+    const m = state.motorista || {};
+    document.getElementById("mot-main").innerHTML = `
+      <div class="mot-content" style="padding-top:4px">
+        <section>
+          <div class="mot-secao-titulo">Complete seu cadastro</div>
+          <div class="mot-linha2 mt">Antes de continuar, confirme ou preencha seus dados. Isso só aparece uma vez.</div>
+        </section>
+
+        <section>
+          <div class="mot-secao-titulo">Dados pessoais</div>
+          <div class="mot-form-field"><label>Nome completo</label><input id="pa-nome" value="${U.esc(m.nome || "")}"></div>
+          <div class="mot-form-field"><label>CPF</label><input value="${U.esc(m.cpf || "—")}" disabled></div>
+          <div class="mot-form-field"><label>RG</label><input id="pa-rg" value="${U.esc(m.rg || "")}"></div>
+          <div class="mot-form-field"><label>Data de nascimento</label><input type="date" id="pa-nascimento" value="${m.data_nascimento || ""}"></div>
+        </section>
+
+        <section>
+          <div class="mot-secao-titulo">Contato</div>
+          <div class="mot-form-field"><label>Telefone</label><input id="pa-telefone" value="${U.esc(m.telefone || "")}" placeholder="(11) 90000-0000"></div>
+          <div class="mot-form-field"><label>Endereço</label><input id="pa-endereco" value="${U.esc(m.endereco || "")}" placeholder="rua, número, bairro"></div>
+          <div class="mot-form-field"><label>Cidade</label><input id="pa-cidade" value="${U.esc(m.cidade || "")}"></div>
+          <div class="mot-form-field"><label>UF</label><input id="pa-uf" maxlength="2" style="text-transform:uppercase" value="${U.esc(m.uf || "")}"></div>
+          <div class="mot-form-field"><label>CEP</label><input id="pa-cep" value="${U.esc(m.cep || "")}"></div>
+        </section>
+
+        <section>
+          <div class="mot-secao-titulo">CNH</div>
+          <div class="mot-form-field"><label>Número da CNH</label><input id="pa-cnh" value="${U.esc(m.cnh || "")}"></div>
+          <div class="mot-form-field"><label>Categoria</label><select id="pa-cnh-cat">
+            <option value="">—</option>
+            ${CNH_CATEGORIAS.map(c => `<option value="${c}" ${m.cnh_categoria === c ? "selected" : ""}>${c}</option>`).join("")}
+          </select></div>
+          <div class="mot-form-field"><label>Validade da CNH</label><input type="date" id="pa-cnh-val" value="${m.cnh_validade || ""}"></div>
+        </section>
+
+        <section>
+          <div class="mot-secao-titulo">Contato de emergência</div>
+          <div class="mot-form-field"><label>Nome</label><input id="pa-emerg-nome" value="${U.esc(m.contato_emergencia_nome || "")}"></div>
+          <div class="mot-form-field"><label>Telefone</label><input id="pa-emerg-tel" value="${U.esc(m.contato_emergencia_telefone || "")}"></div>
+        </section>
+
+        <div id="pa-erro" class="mot-aviso" hidden></div>
+        <button class="mot-btn-grande" id="pa-enviar">Confirmar cadastro</button>
+      </div>`;
+    document.getElementById("pa-enviar").onclick = enviarPrimeiroAcesso;
+  }
+
+  async function enviarPrimeiroAcesso() {
+    const val = id => document.getElementById(id).value.trim();
+    const payload = {
+      nome: val("pa-nome") || null,
+      rg: val("pa-rg") || null,
+      data_nascimento: document.getElementById("pa-nascimento").value || null,
+      telefone: val("pa-telefone"),
+      endereco: val("pa-endereco"),
+      cidade: val("pa-cidade") || null,
+      uf: val("pa-uf").toUpperCase() || null,
+      cep: val("pa-cep") || null,
+      cnh: val("pa-cnh"),
+      cnh_categoria: document.getElementById("pa-cnh-cat").value || null,
+      cnh_validade: document.getElementById("pa-cnh-val").value,
+      contato_emergencia_nome: val("pa-emerg-nome"),
+      contato_emergencia_telefone: val("pa-emerg-tel"),
+    };
+    const faltando = [];
+    if (!payload.telefone) faltando.push("telefone");
+    if (!payload.endereco) faltando.push("endereço");
+    if (!payload.cnh) faltando.push("número da CNH");
+    if (!payload.cnh_validade) faltando.push("validade da CNH");
+    if (!payload.contato_emergencia_nome) faltando.push("contato de emergência (nome)");
+    if (!payload.contato_emergencia_telefone) faltando.push("contato de emergência (telefone)");
+    const erroBox = document.getElementById("pa-erro");
+    if (faltando.length) {
+      erroBox.textContent = "Preencha: " + faltando.join(", ") + ".";
+      erroBox.hidden = false;
+      return;
+    }
+    erroBox.hidden = true;
+    const btn = document.getElementById("pa-enviar");
+    btn.disabled = true; btn.textContent = "Salvando…";
+    try {
+      state.motorista = await LIVE.concluirPrimeiroAcesso(payload);
+      state.perfil.cadastro_status = "completo";
+      if (payload.nome) document.getElementById("mot-nome").textContent = payload.nome;
+      U.toast("Cadastro confirmado!");
+      await liberarPortal();
+    } catch (e) {
+      erroBox.textContent = "Erro ao salvar: " + (e.message || e);
+      erroBox.hidden = false;
+      btn.disabled = false; btn.textContent = "Confirmar cadastro";
+    }
+  }
+
+  /* ================================================================ tour guiado */
+  let tourPasso = 0;
+  let tourAbaOriginal = null;
+
+  function abrirTour() {
+    tourPasso = 0;
+    tourAbaOriginal = state.aba;
+    renderTour();
+  }
+
+  function fecharTour(restaurarAba) {
+    document.querySelectorAll(".tour-backdrop, .tour-card").forEach(el => el.remove());
+    document.querySelectorAll(".mot-tab-btn").forEach(b => b.classList.remove("tour-destaque"));
+    if (restaurarAba && tourAbaOriginal) mostrarAba(tourAbaOriginal);
+  }
+
+  function renderTour() {
+    document.querySelectorAll(".tour-backdrop, .tour-card").forEach(el => el.remove());
+    const passo = TOUR_PASSOS[tourPasso];
+    mostrarAba(passo.aba);
+    document.querySelectorAll(".mot-tab-btn").forEach(b => b.classList.toggle("tour-destaque", b.dataset.aba === passo.aba));
+
+    const backdrop = document.createElement("div");
+    backdrop.className = "tour-backdrop";
+    document.body.appendChild(backdrop);
+
+    const card = document.createElement("div");
+    card.className = "tour-card";
+    card.innerHTML = `
+      <div class="tour-passo">Passo ${tourPasso + 1} de ${TOUR_PASSOS.length}</div>
+      <div class="tour-titulo">${U.esc(passo.titulo)}</div>
+      <div class="tour-texto">${U.esc(passo.texto)}</div>
+      <div class="tour-nav">
+        <button class="tour-pular" id="tour-pular">Pular tour</button>
+        <div style="flex:1"></div>
+        ${tourPasso > 0 ? '<button class="btn btn-sm" id="tour-voltar">Voltar</button>' : ""}
+        <button class="btn btn-sm btn-primary" id="tour-avancar">${tourPasso === TOUR_PASSOS.length - 1 ? "Finalizar" : "Avançar"}</button>
+      </div>`;
+    document.body.appendChild(card);
+
+    document.getElementById("tour-pular").onclick = async () => {
+      fecharTour(true);
+      try { await LIVE.registrarTourMotorista("cancelado"); } catch (_) { /* fechar o tour não pode travar por causa disso */ }
+    };
+    const btnVoltar = document.getElementById("tour-voltar");
+    if (btnVoltar) btnVoltar.onclick = () => { tourPasso--; renderTour(); };
+    document.getElementById("tour-avancar").onclick = async () => {
+      if (tourPasso < TOUR_PASSOS.length - 1) { tourPasso++; renderTour(); return; }
+      fecharTour(true);
+      try { await LIVE.registrarTourMotorista("concluido"); } catch (_) { /* idem */ }
+    };
+  }
+
+  /* libera o portal de verdade: reconstrói as 4 abas (o formulário de primeiro
+     acesso, se apareceu, substituiu esse HTML), carrega os dados e — na
+     primeira vez — dispara o tour sozinho. */
+  async function liberarPortal() {
+    const btnAjuda = document.getElementById("btn-ajuda");
+    btnAjuda.hidden = false;
+    btnAjuda.onclick = () => abrirTour();
+
+    renderEsqueletoAbas();
+    montarTabBar();
+
+    try {
+      state.motorista = await LIVE.motoristaPorId(state.perfil.motorista_id);
+      await carregarTudo();
+      mostrarAba("inicio");
+    } catch (e) {
+      document.getElementById("mot-main").innerHTML = `<div class="mot-aviso">Não foi possível carregar seus dados: ${U.esc(e.message || e)}</div>`;
+      return;
+    }
+
+    if (!state.perfil.tour_concluido_em && !state.perfil.tour_cancelado_em) {
+      abrirTour();
+    }
+  }
+
   /* ================================================================ carga inicial */
   async function carregarTudo() {
     const [roteiroHoje, roteiroProximo, fretes, vales, veiculo] = await Promise.all([
@@ -408,11 +598,26 @@
       location.replace("login.html");
     };
 
-    const { data: perfil, error: erroPerfil } = await sb
-      .from("perfis").select("nome,papel,motorista_id").eq("user_id", data.session.user.id).single();
+    let { data: perfil, error: erroPerfil } = await sb
+      .from("perfis").select("nome,papel,motorista_id,ativo,cadastro_status,tour_concluido_em,tour_cancelado_em")
+      .eq("user_id", data.session.user.id).single();
+
+    if (erroPerfil && erroPerfil.code === "42703") {
+      // banco ainda sem o patch_016 (colunas novas) — não bloqueia ninguém por causa disso,
+      // só não oferece primeiro acesso/tour até o patch rodar
+      const retry = await sb.from("perfis").select("nome,papel,motorista_id,ativo")
+        .eq("user_id", data.session.user.id).single();
+      perfil = retry.data ? { ...retry.data, cadastro_status: "completo", tour_concluido_em: new Date().toISOString(), tour_cancelado_em: null } : null;
+      erroPerfil = retry.error;
+    }
 
     if (erroPerfil || !perfil) {
       document.getElementById("mot-main").innerHTML = `<div class="mot-aviso">Não encontramos seu perfil de acesso. Fale com o administrador.</div>`;
+      return;
+    }
+    if (perfil.ativo === false) {
+      await sb.auth.signOut();
+      location.replace("login.html?desativado=1");
       return;
     }
     if (perfil.papel !== "motorista") {
@@ -427,15 +632,20 @@
     }
 
     state.perfil = perfil;
-    montarTabBar();
 
     try {
       state.motorista = await LIVE.motoristaPorId(perfil.motorista_id);
-      await carregarTudo();
-      mostrarAba("inicio");
     } catch (e) {
       document.getElementById("mot-main").innerHTML = `<div class="mot-aviso">Não foi possível carregar seus dados: ${U.esc(e.message || e)}</div>`;
+      return;
     }
+
+    if (perfil.cadastro_status !== "completo") {
+      renderPrimeiroAcesso();
+      return;
+    }
+
+    await liberarPortal();
   }
 
   iniciar();

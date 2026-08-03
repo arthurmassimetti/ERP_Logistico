@@ -6,20 +6,17 @@
   );
 
   /* motorista vai direto pro portal dele — nunca passa pelo painel administrativo.
-     Qualquer outro papel (ou erro/sem perfil) cai no painel, como sempre. */
+     Qualquer outro papel (ou erro/sem perfil) cai no painel, como sempre.
+     Conta desativada (perfis.ativo=false) nunca entra, mesmo com senha certa. */
   async function destinoPorPapel(userId) {
     try {
-      const { data: perfil } = await sb.from("perfis").select("papel").eq("user_id", userId).single();
+      const { data: perfil } = await sb.from("perfis").select("papel,ativo").eq("user_id", userId).single();
+      if (perfil && perfil.ativo === false) return null;
       return perfil && perfil.papel === "motorista" ? "motorista.html" : "index.html";
     } catch (_) {
       return "index.html";
     }
   }
-
-  /* já está logado? vai direto pro destino certo */
-  sb.auth.getSession().then(async ({ data }) => {
-    if (data.session) location.replace(await destinoPorPapel(data.session.user.id));
-  });
 
   const form = document.getElementById("form-login");
   const inpEmail = document.getElementById("email");
@@ -39,6 +36,19 @@
     boxErro.textContent = msg;
     boxErro.hidden = false;
   }
+
+  if (new URLSearchParams(location.search).get("desativado") === "1") {
+    mostrarErro("Este acesso foi desativado. Fale com o administrador.");
+  }
+
+  /* já está logado? vai direto pro destino certo */
+  sb.auth.getSession().then(async ({ data }) => {
+    if (!data.session) return;
+    const destino = await destinoPorPapel(data.session.user.id);
+    if (destino) { location.replace(destino); return; }
+    await sb.auth.signOut();
+    mostrarErro("Este acesso foi desativado. Fale com o administrador.");
+  });
 
   function traduzErro(error) {
     const m = (error && error.message || "").toLowerCase();
@@ -67,7 +77,15 @@
         btnEntrar.textContent = "Entrar";
         return;
       }
-      location.replace(await destinoPorPapel(data.user.id));
+      const destino = await destinoPorPapel(data.user.id);
+      if (!destino) {
+        await sb.auth.signOut();
+        mostrarErro("Este acesso foi desativado. Fale com o administrador.");
+        btnEntrar.disabled = false;
+        btnEntrar.textContent = "Entrar";
+        return;
+      }
+      location.replace(destino);
     } catch (err) {
       mostrarErro(traduzErro(err));
       btnEntrar.disabled = false;

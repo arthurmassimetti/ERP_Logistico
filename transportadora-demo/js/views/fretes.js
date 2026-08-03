@@ -20,7 +20,7 @@
     mes: HOJE.slice(0, 7), transp: "", status: "", motoristaId: "", busca: "", categoriaId: "",
     viewMode: "kanban", // "kanban" | "tabela"
     dados: null,        // fretes vindos do Supabase (null = ainda não carregou)
-    motoristas: [], veiculos: [], categorias: [], erro: null,
+    motoristas: [], veiculos: [], categorias: [], clientes: [], erro: null,
   };
 
   let canalRealtime = null;
@@ -356,8 +356,10 @@
         </select></div>
         <div class="full"><label>Origem<span class="req">*</span></label><input id="nf-origem" value="${U.esc(g("origem", ""))}" placeholder="ex.: CUMBICA - GRU/SP"></div>
         <div class="full"><label>Destino<span class="req">*</span></label><input id="nf-destino" value="${U.esc(g("destino", ""))}" placeholder="ex.: ATA - CAMPO GRANDE/RJ"></div>
-        <div class="full"><label>Transportadora / agenciador</label><input id="nf-transp" list="transp-list" value="${U.esc(g("transportadora", ""))}" placeholder="ex.: ROBSON - NJG">
-          <datalist id="transp-list">${[...new Set((state.dados || []).map(f => f.transportadora).filter(Boolean))].sort().map(t => `<option value="${U.esc(t)}">`).join("")}</datalist></div>
+        <div><label>Cliente / transportadora</label><select id="nf-transp">
+          <option value="">—</option>
+          ${state.clientes.map(c => `<option value="${c.id}" ${g("cliente_id") === c.id ? "selected" : ""}>${U.esc(c.nome)}</option>`).join("")}
+        </select></div>
         <div><label>Categoria da carga</label><select id="nf-categoria">
           <option value="">—</option>
           ${state.categorias.map(c => `<option value="${c.id}" ${g("categoria_carga_id") === c.id ? "selected" : ""}>${U.esc(c.nome)}</option>`).join("")}
@@ -425,13 +427,16 @@
       if (diariaMot > diaria) {
         U.toast("A diária repassada ao motorista não pode ser maior que a diária total."); return;
       }
+      const clienteId = val("nf-transp") || null;
+      const cliente = clienteId ? state.clientes.find(c => c.id === clienteId) : null;
       const payload = {
         data: val("nf-data"),
         motorista_id: motoristaId,
         veiculo_placa: val("nf-veic") || null,
         origem: origem.toUpperCase(),
         destino: destino.toUpperCase(),
-        transportadora: val("nf-transp").trim().toUpperCase() || null,
+        cliente_id: clienteId,
+        transportadora: cliente ? cliente.nome : null,
         categoria_carga_id: val("nf-categoria") || null,
         peso_kg: val("nf-peso") ? parseFloat(val("nf-peso")) : null,
         cubagem_m3: val("nf-cubagem") ? parseFloat(val("nf-cubagem")) : null,
@@ -523,6 +528,7 @@
       state.veiculos = veiculos;
       state.categorias = categorias;
       state.dados = fretes;
+      try { state.clientes = await LIVE.clientes(); } catch (_) { state.clientes = []; }
       state.erro = null;
     } catch (e) {
       state.dados = [];
