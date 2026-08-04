@@ -6,6 +6,10 @@
   const LIMITE_EXTRATO = 30;
   const HOJE = U.hojeISO();
 
+  /* vale é adiantamento em dinheiro: a tabela é de admin+financeiro no RLS, então pra
+     operacional o botão só levaria a erro de permissão — melhor não oferecer */
+  const podeLancarVale = () => !window.APP || window.APP.podeVer("painelfinanceiro");
+
   function nomeMes(mesRef) {
     const [ano, mes] = mesRef.split("-");
     const nomes = ["janeiro","fevereiro","março","abril","maio","junho",
@@ -301,7 +305,7 @@
           <div class="card card-pad mt">
             <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
               <div class="section-title" style="margin-top:0">Vales</div>
-              <button class="btn btn-sm btn-primary" id="md-vale">+ Lançar vale</button>
+              ${podeLancarVale() ? '<button class="btn btn-sm btn-primary" id="md-vale">+ Lançar vale</button>' : ""}
             </div>
             ${vales.length ? vales.map(v => `
               <div class="fleet-row">
@@ -356,7 +360,8 @@
         e.target.value = veiculoAtual;
       }
     };
-    document.getElementById("md-vale").onclick = () => formVale(m);
+    const btnVale = document.getElementById("md-vale");
+    if (btnVale) btnVale.onclick = () => formVale(m);
   }
 
   /* ---------------------------------------------------------------- carga */

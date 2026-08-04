@@ -31,6 +31,32 @@
     ] },
   ];
 
+  /* O que cada papel enxerga no menu. Papel ausente deste mapa = sem restrição
+     (admin continua vendo tudo). O RLS do banco já bloqueia o DADO em si — isto aqui
+     é a camada de tela: não adianta mostrar "Contas a pagar" pra quem vai receber
+     erro de permissão ao abrir.
+
+     operacional = "CRUD da operação, zero dinheiro" (regra do dono): fica sem o grupo
+     Financeiro inteiro e sem Administração (empresa/usuários são só de admin).
+
+     financeiro ainda não está listado aqui de propósito — continua vendo o menu
+     completo, como antes. Precisa da mesma limpeza, mas é decisão à parte. */
+  const PERMISSOES = {
+    operacional: [
+      "dashboard",
+      "roteiro", "fretes", "piso", "categorias", "clientes", "relatorios",
+      "frota", "manutencoes", "ocorrencias",
+      "motoristas",
+    ],
+  };
+
+  function podeVer(id) {
+    const perfil = window.PERFIL_ATUAL;
+    if (!perfil) return true;              // papel ainda não carregou (a página está oculta até carregar)
+    const lista = PERMISSOES[perfil.papel];
+    return !lista || lista.includes(id);
+  }
+
   let atual = null;
   let gruposManual = {}; // { [grupoId]: true|false } — chave ausente = automático (segue a rota atual)
 
@@ -47,7 +73,12 @@
   }
 
   function renderNav(rotaAtiva) {
-    document.getElementById("nav").innerHTML = NAV.map(n => {
+    /* tira do menu o que o papel não pode ver; grupo que ficou sem nenhum item some junto */
+    const visivel = NAV
+      .map(n => (n.itens ? { ...n, itens: n.itens.filter(i => podeVer(i.id)) } : n))
+      .filter(n => (n.itens ? n.itens.length > 0 : podeVer(n.id)));
+
+    document.getElementById("nav").innerHTML = visivel.map(n => {
       if (n.itens) {
         const dentro = n.itens.some(i => i.id === rotaAtiva);
         const manual = gruposManual[n.id];
@@ -80,6 +111,15 @@
 
   function render() {
     const { rota, sub, params } = parseHash();
+
+    /* tirar do menu não basta: link salvo, atalho de outra tela ou hash digitada na mão
+       chegariam aqui do mesmo jeito. Manda pra Visão geral em vez de abrir a tela. */
+    if (!podeVer(rota)) {
+      U.toast("Esta tela não faz parte do seu acesso.");
+      location.hash = "#/dashboard";
+      return;
+    }
+
     const v = VIEWS[rota] || VIEWS.dashboard;
 
     if (atual && VIEWS[atual] && VIEWS[atual].teardown) VIEWS[atual].teardown();
@@ -113,13 +153,17 @@
 
   function pintarBadge() {
     const btn = document.getElementById("btn-alertas");
+    /* badge é de conta a pagar — some pra quem não tem acesso ao financeiro */
+    if (!podeVer("painelfinanceiro")) { btn.hidden = true; return; }
+    btn.hidden = false;
     btn.innerHTML = `${badgeUrgentes ? '<span class="dot"></span>' : ""}${badgeUrgentes} para pagar hoje`;
     btn.onclick = () => { location.hash = "#/painelfinanceiro"; window.scrollTo(0, 0); };
   }
 
   async function refreshBadges() {
     pintarBadge(); // mostra o último valor conhecido na hora, sem esperar a rede
-    if (!window.LIVE) return;
+    /* sem acesso ao financeiro, as duas consultas abaixo só voltariam erro de RLS */
+    if (!window.LIVE || !podeVer("painelfinanceiro")) return;
     try {
       const [avulsas, fixas] = await Promise.all([window.LIVE.contasPagar(), window.LIVE.contasFixas()]);
       const hojeDia = new Date().getDate();
@@ -130,7 +174,18 @@
     pintarBadge();
   }
 
-  window.APP = { rerender: render, refreshBadges };
+  /* o papel chega depois (auth.js busca o perfil de forma assíncrona), então o menu é
+     montado uma vez sem ele e recomposto aqui. A página fica invisível até o auth.js
+     resolver, então ninguém vê o menu completo piscar antes do filtro entrar. */
+  function aplicarPerfil() {
+    const { rota } = parseHash();
+    if (!podeVer(rota)) { location.hash = "#/dashboard"; return; }  // dispara hashchange -> render()
+    renderNav(rota);
+    pintarBadge();
+    refreshBadges();
+  }
+
+  window.APP = { rerender: render, refreshBadges, aplicarPerfil, podeVer };
 
   /* menu móvel */
   document.getElementById("hamburger").onclick = () => {

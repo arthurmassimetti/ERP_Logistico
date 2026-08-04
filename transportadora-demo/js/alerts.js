@@ -7,11 +7,15 @@
     const push = (a) => A.push(a);
 
     const hoje = U.hojeISO();
+    /* pra quem não tem acesso ao financeiro (operacional), o RLS já devolveria lista vazia
+       nestas três — pedir seria só round-trip jogado fora */
+    const veFinanceiro = !window.APP || window.APP.podeVer("painelfinanceiro");
+    const vazio = Promise.resolve([]);
     const [contasPagar, contasReceber, veiculos, vales, roteiroJanela] = await Promise.all([
-      window.LIVE.contasPagar(),
-      window.LIVE.contasReceber(),
+      veFinanceiro ? window.LIVE.contasPagar() : vazio,
+      veFinanceiro ? window.LIVE.contasReceber() : vazio,
       window.LIVE.frota(),
-      window.LIVE.vales(),
+      veFinanceiro ? window.LIVE.vales() : vazio,
       window.LIVE.roteiro(hoje, U.addDias(hoje, 14)),
     ]);
     const cavalos = veiculos.filter(v => v.tipo === "cavalo");
