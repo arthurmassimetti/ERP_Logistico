@@ -7,9 +7,12 @@
 
   function view() {
     const ddaOk = sessionStorage.getItem("ddaOk") === HOJE;
+    /* DDA e o atalho do financeiro são dinheiro: somem pra quem não tem esse acesso
+       (operacional). Sem isto, sobrariam dois blocos que só levam a erro de permissão. */
+    const veFinanceiro = !window.APP || window.APP.podeVer("painelfinanceiro");
 
     return `
-    ${ddaOk ? "" : `
+    ${ddaOk || !veFinanceiro ? "" : `
     <div class="banner-dda" id="banner-dda">
       <div class="banner-ico">${U.icons.alert}</div>
       <div class="banner-body">
@@ -22,11 +25,12 @@
       </div>
     </div>`}
 
+    ${!veFinanceiro ? "" : `
     <div class="card card-pad mt">
       <div class="section-title" style="margin-top:0">Financeiro</div>
       <p style="color:var(--text-2); margin:0 0 12px">Contas a pagar, contas a receber, saldos e resultado do ano — tudo centralizado no Dashboard financeiro.</p>
       <a class="btn btn-sm btn-primary" href="#/painelfinanceiro">abrir Dashboard financeiro →</a>
-    </div>
+    </div>`}
 
     <div class="section-title">Atenção operacional</div>
     <div class="strip-grid" id="strips"><div class="empty">Carregando…</div></div>`;

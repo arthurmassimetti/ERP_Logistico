@@ -46,7 +46,12 @@
         location.replace("login.html?desativado=1");
         return;
       }
-      if (perfil) { rotulo = perfil.nome; papel = perfil.papel; }
+      if (perfil) {
+        rotulo = perfil.nome; papel = perfil.papel;
+        /* app.js lê isto pra montar o menu do papel (PERMISSOES) e pra barrar rota
+           que não é do acesso — precisa estar setado ANTES do aplicarPerfil() abaixo */
+        window.PERFIL_ATUAL = perfil;
+      }
     } catch (_) { /* sem perfil cadastrado: mostra o e-mail mesmo */ }
 
     if (papel === "motorista") {
@@ -58,6 +63,9 @@
     document.documentElement.style.visibility = "";
 
     onReady(() => {
+      /* o menu foi montado antes do papel chegar — recompõe já filtrado */
+      if (window.APP && window.APP.aplicarPerfil) window.APP.aplicarPerfil();
+
       const alvo = document.getElementById("user-box");
       if (alvo) {
         const linha = document.createElement("div");
