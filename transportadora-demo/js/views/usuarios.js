@@ -34,9 +34,13 @@
       <tr class="${u.ativo === false ? "muted" : ""}">
         <td class="td-main">${U.esc(u.nome || "—")} ${u.ativo === false ? '<span class="tag tag-neutro">inativo</span>' : ""}</td>
         <td>${U.esc(u.email)}</td>
-        <td>${u.papel ? `<span class="tag tag-ok">${U.esc(rotuloPapel(u.papel))}</span>` : '<span class="tag tag-neutro">sem perfil</span>'}</td>
+        <td>${u.papel ? `<span class="tag tag-ok">${U.esc(rotuloPapel(u.papel))}</span>` : '<span class="tag tag-neutro">sem perfil</span>'}
+          ${u.papel === "motorista" && u.motorista_id && u.cadastro_status && u.cadastro_status !== "completo" ? '<span class="tag tag-warn">cadastro pendente</span>' : ""}
+          ${u.papel === "motorista" && !u.motorista_id ? '<span class="tag tag-warn">sem motorista vinculado</span>' : ""}
+        </td>
         <td>${fmtAcesso(u.ultimo_acesso)}</td>
         <td style="white-space:nowrap">
+          ${u.motorista_id ? `<a class="btn btn-sm btn-ghost" href="#/motoristas/${u.motorista_id}">ver cadastro</a>` : ""}
           <button class="btn btn-sm btn-ghost" data-editar="${u.user_id}">editar</button>
           <button class="btn btn-sm btn-ghost" data-senha="${u.user_id}">resetar senha</button>
           <button class="btn btn-sm btn-ghost" data-toggle="${u.user_id}">${u.ativo === false ? "reativar" : "desativar"}</button>
@@ -182,12 +186,15 @@
         </select></div>
         <div><label>Vincular a motorista (opcional)</label>${selectMotorista("ue-motorista", u.motorista_id)}</div>
         <div class="full"><label>Telefone</label><input id="ue-telefone" value="${U.esc(u.telefone || "")}"></div>
+        ${u.motorista_id ? `<div class="full form-note">CNH, endereço, contato de emergência e demais dados pessoais ficam no cadastro do motorista — <a href="#/motoristas/${u.motorista_id}" id="ue-ver-motorista">ver/editar cadastro completo →</a></div>` : ""}
       </div>`,
       rodape: `
         <button class="btn" id="ue-cancel">Cancelar</button>
         <button class="btn btn-primary" id="ue-save">Salvar alterações</button>`,
     });
     document.getElementById("ue-cancel").onclick = U.closeDrawer;
+    const linkMotorista = document.getElementById("ue-ver-motorista");
+    if (linkMotorista) linkMotorista.onclick = U.closeDrawer;
     document.getElementById("ue-save").onclick = async () => {
       const btn = document.getElementById("ue-save");
       btn.disabled = true; btn.textContent = "Salvando…";
