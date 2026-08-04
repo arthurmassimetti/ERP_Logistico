@@ -311,6 +311,7 @@ tr.highlight-row { animation: rowflash 2.4s ease-out; }
 .kanban-card .kc-data { font-size: 11px; color: var(--text-3); font-weight: 600; }
 .kanban-card .kc-rota { font-size: 12.5px; font-weight: 700; margin: 3px 0 5px; }
 .kanban-card .kc-mot { font-size: 11.5px; color: var(--text-2); }
+.kanban-card .kc-checklist { margin-top: 5px; }
 .kanban-card .kc-foot { display: flex; justify-content: space-between; align-items: center; margin-top: 6px; gap: 6px; }
 .kanban-card .kc-valor { font-size: 12.5px; font-weight: 700; }
 .kanban-empty { font-size: 12px; color: var(--text-3); text-align: center; padding: 14px 6px; }
@@ -400,6 +401,22 @@ tr.highlight-row { animation: rowflash 2.4s ease-out; }
 .section-title.grp-warn { color: var(--warn); }
 .section-title.grp-ok { color: var(--ok); }
 .check-inline { display: flex; gap: 6px; align-items: center; font-size: 12.5px; color: var(--text-2); font-weight: 600; text-transform: none; letter-spacing: 0; padding: 8px 0; }
+/* o .check-inline sozinho perde a briga de especificidade dentro dos formulários e dos filtros:
+   ".form-grid label"/".field label" (0-1-1) ganham de ".check-inline" (0-1-0) e devolvem
+   display:block — a caixinha sobe pra cima do texto. E ".form-grid input{width:100%}" /
+   ".field input{min-width:130px}" esticam a caixinha como se fosse campo de texto. Estas duas
+   regras repetem o inline com especificidade maior, pra valer nos 3 contextos. */
+.form-grid label.check-inline, .field label.check-inline {
+  display: flex; gap: 6px; align-items: center; margin-bottom: 0;
+  font-size: 12.5px; font-weight: 600; color: var(--text-2);
+  text-transform: none; letter-spacing: 0;
+}
+.form-grid .check-inline input[type="checkbox"],
+.field .check-inline input[type="checkbox"] {
+  width: 16px; height: 16px; min-width: 0; flex: 0 0 auto;
+  margin: 0; padding: 0; border: none; border-radius: 0; background: none;
+  accent-color: var(--primary);
+}
 
 /* strips de atenção */
 .strip-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 10px; }
@@ -554,6 +571,9 @@ tr.highlight-row { animation: rowflash 2.4s ease-out; }
   background: var(--surface); font-weight: 700; font-size: 13px; color: var(--text-2);
   display: flex; align-items: center; justify-content: center; gap: 6px;
 }
+/* único uso de U.icons sem regra de tamanho — sem isso o svg renderiza no default
+   do navegador (300x150) e ocupa o botão inteiro */
+.chk-opt svg { width: 18px; height: 18px; flex-shrink: 0; }
 .chk-opt.selecionado.ok { background: var(--ok-bg); border-color: var(--ok); color: var(--ok); }
 .chk-opt.selecionado.problema { background: var(--danger-bg); border-color: var(--danger); color: var(--danger); }
 
