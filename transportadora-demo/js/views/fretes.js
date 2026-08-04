@@ -93,12 +93,31 @@
 
   /* ---------------- Kanban ---------------- */
 
+  /* checklists vem embedado em SELECT_FRETE (patch_017: 1 por frete no máximo, via
+     unique index em checklists.frete_id) — null enquanto o motorista não iniciou a viagem */
+  function checklistInfo(f) {
+    const c = f.checklists && f.checklists[0];
+    if (!c) return null;
+    const temProblema = Object.values(c.itens || {}).some(v => v === "problema");
+    return { checklist: c, temProblema };
+  }
+
+  function tagChecklist(f) {
+    const info = checklistInfo(f);
+    if (!info) return "";
+    return info.temProblema
+      ? '<span class="tag tag-warn">checklist com pendência</span>'
+      : '<span class="tag tag-ok">checklist feito</span>';
+  }
+
   function cardHtml(f) {
+    const chk = tagChecklist(f);
     return `
     <div class="kanban-card" draggable="true" data-id="${f.id}">
       <div class="kc-data">${U.dBR(f.data)}</div>
       <div class="kc-rota">${U.esc(f.origem || "—")} → ${U.esc(f.destino || "—")}</div>
       <div class="kc-mot">${U.esc(f.motoristas ? f.motoristas.nome : "—")}</div>
+      ${chk ? `<div class="kc-checklist">${chk}</div>` : ""}
       <div class="kc-foot">
         <span class="kc-valor">${U.money(f.valor_frete)}</span>
         ${U.statusTagFrete(f)}
@@ -256,6 +275,26 @@
     }
   }
 
+  const ROTULO_ITEM_CHECKLIST = { pneus: "Pneus", luzes: "Luzes", freios: "Freios", oleo: "Óleo", agua: "Água", estado_geral: "Estado geral" };
+
+  function checklistDetalheHtml(f) {
+    const info = checklistInfo(f);
+    if (!info) return `<div class="legend-note">Checklist do caminhão: ainda não enviado.</div>`;
+    const itens = info.checklist.itens || {};
+    const linhas = Object.keys(ROTULO_ITEM_CHECKLIST).map(chave => {
+      const v = itens[chave];
+      const tag = v === "problema" ? '<span class="tag tag-danger">problema</span>'
+        : v === "ok" ? '<span class="tag tag-ok">OK</span>' : '<span class="tag tag-neutro">—</span>';
+      return `<span style="margin-right:10px;white-space:nowrap">${ROTULO_ITEM_CHECKLIST[chave]} ${tag}</span>`;
+    }).join("");
+    return `
+      <div><b style="font-size:12.5px">Checklist do caminhão</b>
+      <div class="legend-note" style="margin-top:4px">${linhas}</div>
+      ${info.checklist.observacao ? `<div class="legend-note">observação do motorista: "${U.esc(info.checklist.observacao)}"</div>` : ""}
+      <div class="legend-note">enviado em ${U.dBRfull(info.checklist.criado_em)} ${(info.checklist.criado_em || "").slice(11, 16)}${info.temProblema ? ' · <a href="#/ocorrencias">ver pendência em Ocorrências →</a>' : ""}</div>
+      </div>`;
+  }
+
   function detalhe(id) {
     const f = state.dados.find(x => x.id === id);
     if (!f) return;
@@ -268,6 +307,7 @@
       </div>
       <dl class="kv">
         <dt>Motorista</dt><dd>${U.esc(f.motoristas ? f.motoristas.nome : "—")} ${f.veiculos ? "· " + U.placaFmt(f.veiculos.placa) : ""}</dd>
+        ${f.km_inicial != null || f.km_final != null ? `<dt>Km inicial / final</dt><dd>${f.km_inicial != null ? U.num(f.km_inicial) : "—"}${f.km_final != null ? " → " + U.num(f.km_final) : ""}</dd>` : ""}
         <dt>Transportadora</dt><dd>${U.esc(f.transportadora || "—")}</dd>
         <dt>Categoria da carga</dt><dd>${f.categorias_carga ? U.esc(f.categorias_carga.nome) : "não informada"}</dd>
         <dt>Peso / cubagem</dt><dd>${f.peso_kg ? U.num(f.peso_kg) + " kg" : "—"}${f.cubagem_m3 ? " · " + U.num(f.cubagem_m3, 2) + " m³" : ""}</dd>
@@ -283,6 +323,8 @@
         <dt>Pagamento</dt><dd>${f.pagamento_realizado ? "recebido " + U.dBRfull(f.pagamento_realizado) : (f.pagamento_previsto ? "previsto " + U.dBRfull(f.pagamento_previsto) : "")} ${f.banco ? `· ${U.esc(f.banco)}` : ""} ${U.statusTagFrete(f)}</dd>
         ${f.observacao ? `<dt>Observação</dt><dd>${U.esc(f.observacao)}</dd>` : ""}
       </dl>
+      <div class="divider"></div>
+      ${checklistDetalheHtml(f)}
       <div id="fd-historico" class="legend-note"></div>
       <div class="divider"></div>
       <div class="full" style="display:flex;gap:10px;justify-content:flex-end">

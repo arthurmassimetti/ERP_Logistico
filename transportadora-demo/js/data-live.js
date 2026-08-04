@@ -53,7 +53,7 @@
     return data;
   };
 
-  const SELECT_FRETE = "*, motoristas(nome), veiculos(placa), categorias_carga(nome)";
+  const SELECT_FRETE = "*, motoristas(nome), veiculos(placa), categorias_carga(nome), checklists(id,itens,observacao,criado_em)";
 
   LIVE.fretes = async function () {
     const { data, error } = await window.sb
@@ -258,23 +258,10 @@
     return data;
   };
 
-  /* primeiro acesso do motorista — a RPC resolve o motorista_id sozinha a partir de quem está logado */
+  /* primeiro acesso (qualquer papel) — a RPC resolve pelo login quem está preenchendo e grava
+     no lugar certo (motoristas se for motorista, perfis se não for). patch_017. */
   LIVE.concluirPrimeiroAcesso = async function (dados) {
-    const { data, error } = await window.sb.rpc("concluir_primeiro_acesso", {
-      p_telefone: dados.telefone,
-      p_cnh: dados.cnh,
-      p_cnh_categoria: dados.cnh_categoria,
-      p_cnh_validade: dados.cnh_validade,
-      p_endereco: dados.endereco,
-      p_cidade: dados.cidade,
-      p_uf: dados.uf,
-      p_cep: dados.cep,
-      p_contato_emergencia_nome: dados.contato_emergencia_nome,
-      p_contato_emergencia_telefone: dados.contato_emergencia_telefone,
-      p_nome: dados.nome ?? null,
-      p_data_nascimento: dados.data_nascimento || null,
-      p_rg: dados.rg ?? null,
-    });
+    const { data, error } = await window.sb.rpc("concluir_primeiro_acesso", { p_dados: dados });
     if (error) throw error;
     return data;
   };
@@ -552,18 +539,39 @@
     return data;
   };
 
-  /* portal do motorista: checklist já enviado hoje pra este veículo (null se ainda não enviou) */
-  LIVE.meuChecklistHoje = async function (veiculoPlaca) {
+  /* portal do motorista: a viagem atual (pendente de iniciar ou já em trânsito). vw_fretes_motorista
+     já filtra pro próprio motorista (patch_017 acrescentou status_entrega/km à view); pega a mais
+     antiga em aberto (normalmente a de hoje, ou uma atrasada) — nunca uma já entregue. */
+  LIVE.minhaViagemAtual = async function () {
     const { data, error } = await window.sb
-      .from("checklists").select("*")
-      .eq("veiculo_placa", veiculoPlaca).eq("data", window.U.hojeISO())
-      .order("criado_em", { ascending: false }).limit(1).maybeSingle();
+      .from("vw_fretes_motorista").select("*")
+      .in("status_entrega", ["aguardando_coleta", "em_transito"])
+      .order("data", { ascending: true }).limit(1).maybeSingle();
     if (error) throw error;
     return data;
   };
 
-  LIVE.criarChecklist = async function (dados) {
-    const { data, error } = await window.sb.from("checklists").insert(dados).select().single();
+  /* inicia a viagem: grava o checklist do caminhão amarrado ao frete, move o kanban pra
+     "em trânsito" e — se algum item veio "problema" — abre ocorrência sozinho, tipada pelo
+     item (patch_017, RPC iniciar_viagem). Nunca bloqueia por causa de item ruim. */
+  LIVE.iniciarViagem = async function (freteId, kmInicial, itens, observacao) {
+    const { data, error } = await window.sb.rpc("iniciar_viagem", {
+      p_frete_id: freteId,
+      p_km_inicial: kmInicial ?? null,
+      p_itens: itens,
+      p_observacao: observacao || null,
+    });
+    if (error) throw error;
+    return data;
+  };
+
+  /* finaliza a entrega: km final + status "entregue". Sem checklist de chegada (decisão do
+     dono: só checklist do caminhão, na saída). */
+  LIVE.finalizarViagem = async function (freteId, kmFinal) {
+    const { data, error } = await window.sb.rpc("finalizar_viagem", {
+      p_frete_id: freteId,
+      p_km_final: kmFinal ?? null,
+    });
     if (error) throw error;
     return data;
   };

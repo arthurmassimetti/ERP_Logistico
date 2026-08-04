@@ -1,4 +1,6 @@
-/* Portal do motorista — 4 abas (Início / Viagens / Checklist / Relatar problema).
+/* Portal do motorista — 3 abas (Início / Viagens / Relatar problema). O checklist do
+   caminhão não é mais aba própria: mora dentro de "Viagens", atrás do botão "Iniciar
+   viagem" (patch_017 — checklist sempre amarrado a um frete, nunca solto).
    Só dados vivos do Supabase; RLS garante que só vem o que é do próprio motorista.
    Sem drawer/modal (não existem nesta página) — formulários ficam direto na tela. */
 (function () {
@@ -11,7 +13,6 @@
   const TABS = [
     { id: "inicio", rotulo: "Início", icone: "home" },
     { id: "viagens", rotulo: "Viagens", icone: "pin" },
-    { id: "checklist", rotulo: "Checklist", icone: "check" },
     { id: "problema", rotulo: "Relatar", icone: "alert" },
   ];
 
@@ -34,16 +35,15 @@
 
   const TOUR_PASSOS = [
     { aba: "inicio", titulo: "Início", texto: "Aqui você vê alertas importantes, a tarefa de hoje e o resumo do seu acerto do mês." },
-    { aba: "viagens", titulo: "Viagens", texto: "Suas próximas tarefas programadas e o histórico de viagens já realizadas." },
-    { aba: "checklist", titulo: "Checklist", texto: "Envie o checklist do veículo antes de cada viagem — pneus, freios, óleo e mais." },
-    { aba: "problema", titulo: "Relatar", texto: "Percebeu algo errado no veículo? Relate aqui pra equipe de frota avaliar." },
+    { aba: "viagens", titulo: "Viagens", texto: "Antes de sair, toque em \"Iniciar viagem\" e responda o checklist do caminhão — pneus, freios, óleo e mais. Ao voltar, finalize a entrega com o km final." },
+    { aba: "problema", titulo: "Relatar", texto: "Percebeu algo errado no veículo fora de uma viagem? Relate aqui pra equipe de frota avaliar." },
   ];
 
   const state = {
     aba: "inicio",
     perfil: null, motorista: null, veiculo: null,
     roteiroHoje: [], roteiroProximo: [], fretes: [], vales: [],
-    checklistHoje: null, checklistRespostas: {},
+    viagemAtual: null, viagemPasso: "resumo", viagemChecklistRespostas: {},
     problemaTipo: "outro", problemaUrgencia: "media",
   };
 
@@ -66,6 +66,11 @@
   }
   function localCompleto(r) {
     return [r.destino_local, r.destino_cidade, r.destino_uf].filter(Boolean).join(" · ") || "sem destino informado";
+  }
+  /* mesma ideia de localCompleto, mas pra linha de FRETE (origem/destino texto livre),
+     não de roteiro (destino_local/cidade/uf) — são campos diferentes */
+  function rotaFrete(f) {
+    return `${f.origem || "—"} → ${f.destino || "—"}`;
   }
 
   /* ================================================================ barra de abas */
@@ -100,9 +105,15 @@
       const info = U.situacaoVeiculoInfo(state.veiculo.situacao);
       alertas.push(`Seu veículo (${U.placaFmt(state.veiculo.placa)}) está ${info.rotulo}${state.veiculo.situacao_motivo ? ": " + state.veiculo.situacao_motivo : "."}`);
     }
+    if (state.veiculo && state.motorista && U.categoriaAtendeVeiculo(state.motorista.cnh_categoria, state.veiculo.tipo) === false) {
+      alertas.push(`Sua CNH (categoria ${U.esc(state.motorista.cnh_categoria)}) não cobre ${state.veiculo.tipo === "carreta" ? "carreta" : "cavalo mecânico"} — fale com o administrador.`);
+    }
     const valesAbertos = (state.vales || []).filter(v => v.saldo > 0);
     if (valesAbertos.length) alertas.push(`Você tem ${valesAbertos.length} vale(s) com saldo a descontar.`);
     if (!state.veiculo) alertas.push("Você ainda não tem um veículo vinculado. Fale com o administrador.");
+    if (state.viagemAtual && state.viagemAtual.status_entrega === "aguardando_coleta") {
+      alertas.push(`Você tem uma viagem pra iniciar (${U.esc(rotaFrete(state.viagemAtual))}) — vá na aba Viagens.`);
+    }
     return alertas;
   }
 
@@ -175,13 +186,161 @@
   }
 
   /* ================================================================ aba Viagens */
+  /* "viagem" = o frete (status_entrega). Iniciar viagem grava o checklist do caminhão
+     amarrado ao frete e abre a etapa; nenhum item de checklist bloqueia a saída — só
+     abre ocorrência pra manutenção quando marcado "problema" (decisão do dono). */
+  function chkItemFormHtml() {
+    return ITENS_CHECKLIST.map(it => `
+      <div class="chk-item">
+        <div class="chk-item-nome">${it.rotulo}</div>
+        <div class="chk-opcoes">
+          <button type="button" class="chk-opt ok" data-item="${it.chave}" data-valor="ok">${U.icons.check} OK</button>
+          <button type="button" class="chk-opt problema" data-item="${it.chave}" data-valor="problema">${U.icons.alert} Problema</button>
+        </div>
+      </div>`).join("");
+  }
+
+  function blocoViagemAtual() {
+    const v = state.viagemAtual;
+    if (!v) {
+      if (!state.veiculo) {
+        return `<div class="mot-aviso">Você ainda não tem um veículo vinculado. Fale com o administrador antes de iniciar uma viagem.</div>`;
+      }
+      return `<div class="mot-card"><div class="mot-linha1">Nenhuma viagem pendente</div><div class="mot-linha2">Quando uma carga for lançada pro seu nome, ela aparece aqui pra você iniciar.</div></div>`;
+    }
+    /* o veículo da viagem é o do FRETE (definido pelo escritório); o vinculado ao motorista
+       é só o fallback — quando o frete não tem um, é esse que a rpc usa */
+    const placa = v.veiculo_placa || (state.veiculo && state.veiculo.placa);
+    if (!placa) {
+      return `<div class="mot-aviso">Esta viagem não tem veículo definido e você não tem um vinculado. Fale com o administrador.</div>`;
+    }
+    if (v.status_entrega === "em_transito") {
+      return `
+        <div class="mot-card">
+          <div class="mot-linha1">${U.esc(rotaFrete(v))}</div>
+          <div class="mot-linha2">${U.dBRfull(v.data)} · ${U.placaFmt(placa)}${v.km_inicial != null ? " · saiu com " + U.num(v.km_inicial) + " km" : ""}</div>
+          <div class="mot-linha3"><span class="tag tag-info">em trânsito</span></div>
+        </div>
+        <div class="mot-form-field mt">
+          <label>Km final</label>
+          <input type="number" id="viagem-km-final" inputmode="numeric" placeholder="ex.: 128950">
+        </div>
+        <button class="mot-btn-grande" id="viagem-finalizar-btn">Finalizar entrega</button>`;
+    }
+    if (state.viagemPasso !== "checklist") {
+      return `
+        <div class="mot-card">
+          <div class="mot-linha1">${U.esc(rotaFrete(v))}</div>
+          <div class="mot-linha2">${U.dBRfull(v.data)} · ${U.placaFmt(placa)}</div>
+          <div class="mot-linha3"><span class="tag tag-warn">aguardando coleta</span></div>
+        </div>
+        <div class="legend-note mt">Iniciar a viagem abre o checklist obrigatório do caminhão.</div>
+        <button class="mot-btn-grande" id="viagem-iniciar-btn">Iniciar viagem</button>`;
+    }
+    return `
+      <div class="mot-card">
+        <div class="mot-linha1">${U.esc(rotaFrete(v))}</div>
+        <div class="mot-linha2">${U.dBRfull(v.data)} · ${U.placaFmt(placa)}</div>
+      </div>
+      <div class="mot-secao-titulo mt">Checklist do caminhão</div>
+      <div class="mt">${chkItemFormHtml()}</div>
+      <div class="mot-form-field mt">
+        <label>Km inicial</label>
+        <input type="number" id="viagem-km-inicial" inputmode="numeric" placeholder="ex.: 128400">
+      </div>
+      <div class="mot-form-field">
+        <label>Observação (opcional)</label>
+        <textarea id="viagem-obs" placeholder="algo a mais que você notou"></textarea>
+      </div>
+      <div class="legend-note">Item marcado "Problema" não te impede de sair — só avisa a manutenção.</div>
+      <button class="mot-btn-grande" id="viagem-confirmar-btn">Confirmar e iniciar viagem</button>`;
+  }
+
+  function bindViagemAtual() {
+    const v = state.viagemAtual;
+    const alvo = document.getElementById("aba-viagens");
+
+    const btnIniciar = document.getElementById("viagem-iniciar-btn");
+    if (btnIniciar) btnIniciar.onclick = () => { state.viagemPasso = "checklist"; renderViagens(); };
+
+    alvo.querySelectorAll(".chk-opt").forEach(btn => {
+      btn.onclick = () => {
+        const item = btn.dataset.item, valor = btn.dataset.valor;
+        state.viagemChecklistRespostas[item] = valor;
+        alvo.querySelectorAll(`.chk-opt[data-item="${item}"]`).forEach(b => b.classList.toggle("selecionado", b.dataset.valor === valor));
+      };
+    });
+
+    const btnConfirmar = document.getElementById("viagem-confirmar-btn");
+    if (btnConfirmar) btnConfirmar.onclick = () => confirmarIniciarViagem(v);
+
+    const btnFinalizar = document.getElementById("viagem-finalizar-btn");
+    if (btnFinalizar) btnFinalizar.onclick = () => confirmarFinalizarViagem(v);
+  }
+
+  async function confirmarIniciarViagem(v) {
+    const faltando = ITENS_CHECKLIST.filter(it => !state.viagemChecklistRespostas[it.chave]);
+    if (faltando.length) { U.toast("Responda todos os itens: " + faltando.map(f => f.rotulo).join(", ")); return; }
+    const btn = document.getElementById("viagem-confirmar-btn");
+    btn.disabled = true; btn.textContent = "Enviando…";
+    const kmInicialStr = document.getElementById("viagem-km-inicial").value;
+    const itensProblema = Object.values(state.viagemChecklistRespostas).filter(v2 => v2 === "problema").length;
+    try {
+      const atualizado = await LIVE.iniciarViagem(
+        v.id,
+        kmInicialStr ? parseFloat(kmInicialStr) : null,
+        state.viagemChecklistRespostas,
+        document.getElementById("viagem-obs").value.trim() || null
+      );
+      state.viagemAtual = atualizado;
+      state.viagemPasso = "resumo";
+      state.viagemChecklistRespostas = {};
+      U.toast(itensProblema ? `Viagem iniciada. ${itensProblema} item(ns) reportado(s) pra manutenção.` : "Viagem iniciada.");
+      renderViagens();
+      renderInicio();
+    } catch (e) {
+      U.toast("Erro ao iniciar viagem: " + (e.message || e));
+      btn.disabled = false; btn.textContent = "Confirmar e iniciar viagem";
+    }
+  }
+
+  async function confirmarFinalizarViagem(v) {
+    const kmFinalStr = document.getElementById("viagem-km-final").value;
+    const btn = document.getElementById("viagem-finalizar-btn");
+    btn.disabled = true; btn.textContent = "Finalizando…";
+    try {
+      await LIVE.finalizarViagem(v.id, kmFinalStr ? parseFloat(kmFinalStr) : null);
+      U.toast("Entrega finalizada.");
+      await atualizarViagemEHistorico();
+      renderViagens();
+      renderInicio();
+    } catch (e) {
+      U.toast("Erro ao finalizar: " + (e.message || e));
+      btn.disabled = false; btn.textContent = "Finalizar entrega";
+    }
+  }
+
+  /* refaz a busca da viagem atual + histórico depois de iniciar/finalizar — mais simples e
+     confiável do que tentar remontar o estado local a partir do retorno da rpc */
+  async function atualizarViagemEHistorico() {
+    const [viagemAtual, fretes] = await Promise.all([LIVE.minhaViagemAtual(), LIVE.meusFretes(30)]);
+    state.viagemAtual = viagemAtual;
+    state.viagemPasso = "resumo";
+    state.fretes = fretes;
+  }
+
   function renderViagens() {
     const alvo = document.getElementById("aba-viagens");
     const tarefaHoje = state.roteiroHoje[0];
 
     alvo.innerHTML = `
       <section>
-        <div class="mot-secao-titulo">Tarefa atual</div>
+        <div class="mot-secao-titulo">Viagem atual</div>
+        <div class="mt">${blocoViagemAtual()}</div>
+      </section>
+
+      <section>
+        <div class="mot-secao-titulo">Tarefa de hoje (agenda)</div>
         <div class="mt">
           ${tarefaHoje ? `
           <div class="mot-card">
@@ -207,99 +366,21 @@
       <section>
         <div class="mot-secao-titulo">Histórico de viagens realizadas</div>
         <div class="mt">
-          ${state.fretes.length ? state.fretes.slice(0, 20).map(f => `
+          ${(() => {
+            /* só entregues: a viagem em andamento já aparece no card lá em cima, e uma
+               ainda não iniciada não é "realizada" */
+            const realizadas = state.fretes.filter(f => !f.status_entrega || f.status_entrega === "entregue");
+            return realizadas.length ? realizadas.slice(0, 20).map(f => `
             <div class="mot-card">
-              <div class="mot-linha1">${U.esc(f.origem || "—")} → ${U.esc(f.destino || "—")}</div>
+              <div class="mot-linha1">${U.esc(rotaFrete(f))}</div>
               <div class="mot-linha2">${U.dBRfull(f.data)} · ${U.esc(f.transportadora || "—")}</div>
               <div class="mot-linha3"><span class="tag tag-ok">comissão ${U.money(f.comissao)}</span>${f.diaria ? `<span class="tag tag-info">diária ${U.money(f.diaria)}</span>` : ""}</div>
-            </div>`).join("") : `<div class="empty">Nenhuma viagem no histórico ainda.</div>`}
+            </div>`).join("") : `<div class="empty">Nenhuma viagem no histórico ainda.</div>`;
+          })()}
         </div>
       </section>`;
-  }
 
-  /* ================================================================ aba Checklist */
-  function renderChecklist() {
-    const alvo = document.getElementById("aba-checklist");
-
-    if (!state.veiculo) {
-      alvo.innerHTML = `
-        <div class="mot-secao-titulo">Checklist do veículo</div>
-        <div class="mot-aviso mt">Você ainda não tem um veículo vinculado. Fale com o administrador antes de enviar o checklist.</div>`;
-      return;
-    }
-
-    if (state.checklistHoje) {
-      const itens = state.checklistHoje.itens || {};
-      alvo.innerHTML = `
-        <div class="mot-secao-titulo">Checklist de hoje</div>
-        <div class="mot-confirma mt">Checklist enviado às ${(state.checklistHoje.criado_em || "").slice(11, 16)}.</div>
-        <div class="mt">
-          ${ITENS_CHECKLIST.map(it => `
-            <div class="chk-item">
-              <div class="chk-item-nome">${it.rotulo}</div>
-              <div class="mot-linha3">${itens[it.chave] === "problema" ? '<span class="tag tag-danger">problema</span>' : '<span class="tag tag-ok">OK</span>'}</div>
-            </div>`).join("")}
-          ${state.checklistHoje.observacao ? `<div class="mot-card"><div class="mot-linha2">${U.esc(state.checklistHoje.observacao)}</div></div>` : ""}
-        </div>
-        <div class="legend-note mt">Já enviado hoje para ${U.placaFmt(state.veiculo.placa)}. Novo envio libera amanhã.</div>`;
-      return;
-    }
-
-    alvo.innerHTML = `
-      <div class="mot-secao-titulo">Checklist — ${U.placaFmt(state.veiculo.placa)}</div>
-      <div class="mt">
-        ${ITENS_CHECKLIST.map(it => `
-          <div class="chk-item">
-            <div class="chk-item-nome">${it.rotulo}</div>
-            <div class="chk-opcoes">
-              <button type="button" class="chk-opt ok" data-item="${it.chave}" data-valor="ok">${U.icons.check} OK</button>
-              <button type="button" class="chk-opt problema" data-item="${it.chave}" data-valor="problema">${U.icons.alert} Problema</button>
-            </div>
-          </div>`).join("")}
-      </div>
-      <div class="mot-form-field mt">
-        <label>Observação (opcional)</label>
-        <textarea id="chk-obs" placeholder="algo a mais que você notou"></textarea>
-      </div>
-      <button class="mot-btn-grande" id="chk-enviar">Enviar checklist</button>`;
-
-    alvo.querySelectorAll(".chk-opt").forEach(btn => {
-      btn.onclick = () => {
-        const item = btn.dataset.item, valor = btn.dataset.valor;
-        state.checklistRespostas[item] = valor;
-        alvo.querySelectorAll(`.chk-opt[data-item="${item}"]`).forEach(b => b.classList.toggle("selecionado", b.dataset.valor === valor));
-      };
-    });
-    document.getElementById("chk-enviar").onclick = enviarChecklist;
-  }
-
-  async function enviarChecklist() {
-    const faltando = ITENS_CHECKLIST.filter(it => !state.checklistRespostas[it.chave]);
-    if (faltando.length) { U.toast("Responda todos os itens: " + faltando.map(f => f.rotulo).join(", ")); return; }
-
-    const btn = document.getElementById("chk-enviar");
-    btn.disabled = true; btn.textContent = "Enviando…";
-    try {
-      const salvo = await LIVE.criarChecklist({
-        tipo: "pre_viagem",
-        motorista_id: state.perfil.motorista_id,
-        veiculo_placa: state.veiculo.placa,
-        itens: state.checklistRespostas,
-        observacao: document.getElementById("chk-obs").value.trim() || null,
-      });
-      state.checklistHoje = salvo;
-      U.toast("Checklist enviado.");
-      renderChecklist();
-    } catch (e) {
-      if (e.code === "23505") {
-        U.toast("Você já enviou o checklist de hoje para este veículo.");
-        state.checklistHoje = await LIVE.meuChecklistHoje(state.veiculo.placa);
-        renderChecklist();
-      } else {
-        U.toast("Erro ao enviar: " + (e.message || e));
-        btn.disabled = false; btn.textContent = "Enviar checklist";
-      }
-    }
+    bindViagemAtual();
   }
 
   /* ================================================================ aba Relatar problema */
@@ -396,7 +477,6 @@
     document.getElementById("mot-main").innerHTML = `
       <section id="aba-inicio" class="mot-aba"><div class="empty">Carregando…</div></section>
       <section id="aba-viagens" class="mot-aba" hidden></section>
-      <section id="aba-checklist" class="mot-aba" hidden></section>
       <section id="aba-problema" class="mot-aba" hidden></section>`;
   }
 
@@ -412,7 +492,11 @@
         <section>
           <div class="mot-secao-titulo">Dados pessoais</div>
           <div class="mot-form-field"><label>Nome completo</label><input id="pa-nome" value="${U.esc(m.nome || "")}"></div>
-          <div class="mot-form-field"><label>CPF</label><input value="${U.esc(m.cpf || "—")}" disabled></div>
+          <div class="mot-form-field"><label>CPF${!m.cpf ? '<span class="req">*</span>' : ""}</label>
+            ${m.cpf
+              ? `<input value="${U.esc(U.formatarCPF(m.cpf))}" disabled>`
+              : `<input id="pa-cpf" placeholder="000.000.000-00" inputmode="numeric">`}
+          </div>
           <div class="mot-form-field"><label>RG</label><input id="pa-rg" value="${U.esc(m.rg || "")}"></div>
           <div class="mot-form-field"><label>Data de nascimento</label><input type="date" id="pa-nascimento" value="${m.data_nascimento || ""}"></div>
         </section>
@@ -450,6 +534,7 @@
 
   async function enviarPrimeiroAcesso() {
     const val = id => document.getElementById(id).value.trim();
+    const campoCpf = document.getElementById("pa-cpf"); // só existe na tela se o motorista ainda não tinha CPF
     const payload = {
       nome: val("pa-nome") || null,
       rg: val("pa-rg") || null,
@@ -465,7 +550,10 @@
       contato_emergencia_nome: val("pa-emerg-nome"),
       contato_emergencia_telefone: val("pa-emerg-tel"),
     };
+    if (campoCpf) payload.cpf = campoCpf.value.replace(/\D/g, "");
+
     const faltando = [];
+    if (campoCpf && !payload.cpf) faltando.push("CPF");
     if (!payload.telefone) faltando.push("telefone");
     if (!payload.endereco) faltando.push("endereço");
     if (!payload.cnh) faltando.push("número da CNH");
@@ -475,6 +563,16 @@
     const erroBox = document.getElementById("pa-erro");
     if (faltando.length) {
       erroBox.textContent = "Preencha: " + faltando.join(", ") + ".";
+      erroBox.hidden = false;
+      return;
+    }
+    if (campoCpf && payload.cpf && !U.validarCPF(payload.cpf)) {
+      erroBox.textContent = "CPF inválido — confira os números digitados.";
+      erroBox.hidden = false;
+      return;
+    }
+    if (!U.cnhFormatoValido(payload.cnh)) {
+      erroBox.textContent = "Número da CNH inválido — precisa ter 11 dígitos.";
       erroBox.hidden = false;
       return;
     }
@@ -574,19 +672,19 @@
 
   /* ================================================================ carga inicial */
   async function carregarTudo() {
-    const [roteiroHoje, roteiroProximo, fretes, vales, veiculo] = await Promise.all([
+    const [roteiroHoje, roteiroProximo, fretes, vales, veiculo, viagemAtual] = await Promise.all([
       LIVE.roteiro(HOJE, HOJE),
       LIVE.roteiro(U.addDias(HOJE, 1), U.addDias(HOJE, 14)),
       LIVE.meusFretes(30),
       LIVE.meusVales(),
       LIVE.meuVeiculo(),
+      LIVE.minhaViagemAtual(),
     ]);
     state.roteiroHoje = roteiroHoje; state.roteiroProximo = roteiroProximo;
     state.fretes = fretes; state.vales = vales; state.veiculo = veiculo;
+    state.viagemAtual = viagemAtual;
 
-    if (veiculo) state.checklistHoje = await LIVE.meuChecklistHoje(veiculo.placa);
-
-    renderInicio(); renderViagens(); renderChecklist(); renderProblema();
+    renderInicio(); renderViagens(); renderProblema();
   }
 
   async function iniciar() {

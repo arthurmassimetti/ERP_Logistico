@@ -131,9 +131,13 @@
       const val = id => document.getElementById(id).value.trim();
       const nome = val("mform-nome");
       if (!nome) { U.toast("Preencha o nome."); return; }
+      const cpf = val("mform-cpf");
+      const cnh = val("mform-cnh");
+      if (cpf && !U.validarCPF(cpf)) { U.toast("CPF inválido — confira os números digitados."); return; }
+      if (cnh && !U.cnhFormatoValido(cnh)) { U.toast("Número da CNH inválido — precisa ter 11 dígitos."); return; }
       const payload = {
-        nome, cpf: val("mform-cpf") || null, rg: val("mform-rg") || null,
-        cnh: val("mform-cnh") || null, telefone: val("mform-tel") || null,
+        nome, cpf: cpf || null, rg: val("mform-rg") || null,
+        cnh: cnh || null, telefone: val("mform-tel") || null,
         cnh_categoria: val("mform-cnh-cat") || null,
         cnh_validade: document.getElementById("mform-cnh-val").value || null,
         disponibilidade: document.getElementById("mform-disp").value,

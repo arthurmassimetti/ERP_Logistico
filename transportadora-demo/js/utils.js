@@ -165,6 +165,40 @@
 
   U.placaFmt = p => p ? p.replace(/^([A-Z]{3})(\w+)$/, "$1 $2") : "—";
 
+  /* CPF: algoritmo oficial dos 2 dígitos verificadores (módulo 11). Recusa também
+     sequências repetidas (111.111.111-11 etc.), que passariam no cálculo mas não existem. */
+  U.validarCPF = function (cpf) {
+    const d = String(cpf || "").replace(/\D/g, "");
+    if (d.length !== 11 || /^(\d)\1{10}$/.test(d)) return false;
+    const digito = (fatorInicial) => {
+      let soma = 0;
+      for (let i = 0; i < fatorInicial - 1; i++) soma += Number(d[i]) * (fatorInicial - i);
+      const resto = (soma * 10) % 11;
+      return resto === 10 ? 0 : resto;
+    };
+    return digito(10) === Number(d[9]) && digito(11) === Number(d[10]);
+  };
+  U.formatarCPF = function (cpf) {
+    const d = String(cpf || "").replace(/\D/g, "").slice(0, 11);
+    if (d.length !== 11) return cpf || "";
+    return d.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4");
+  };
+
+  /* CNH: não existe dígito verificador público documentado (diferente do CPF) — só dá pra
+     conferir formato (11 dígitos numéricos) offline. Status real (suspensa/cassada) exige
+     integração paga com SENATRAN/Detran, fora do escopo do que dá pra validar aqui. */
+  U.cnhFormatoValido = function (cnh) {
+    const d = String(cnh || "").replace(/\D/g, "");
+    return d.length === 11;
+  };
+
+  /* toda a frota hoje é cavalo/carreta (veículo pesado/articulado) — exige categoria com "E" */
+  U.categoriaAtendeVeiculo = function (categoria, tipoVeiculo) {
+    if (!categoria) return null; // sem categoria cadastrada: não dá pra avaliar
+    if (tipoVeiculo === "cavalo" || tipoVeiculo === "carreta") return categoria.toUpperCase().includes("E");
+    return true;
+  };
+
   U.sum = (arr, fn) => arr.reduce((a, x) => a + (fn(x) || 0), 0);
 
   U.gerarSenha = function () {

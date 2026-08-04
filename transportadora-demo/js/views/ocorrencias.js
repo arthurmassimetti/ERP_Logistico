@@ -18,6 +18,13 @@
 
   const ORDEM_URG = { alta: 0, media: 1, baixa: 2 };
 
+  /* checklist_id vem preenchido quando a ocorrência nasceu sozinha de um item "problema" no
+     checklist de início de viagem (patch_017, rpc iniciar_viagem) — distingue do relato manual
+     feito na aba "Relatar" do portal do motorista */
+  const origemOcorrencia = o => o.checklist_id
+    ? '<span class="tag tag-info">via checklist</span>'
+    : '<span class="tag tag-neutro">relato manual</span>';
+
   const state = { lista: [], filtroStatus: "ativas", erro: null };
 
   function filtrar() {
@@ -38,7 +45,7 @@
 
     U.openDrawer({
       titulo: `Ocorrência — ${U.esc(o.motoristas ? o.motoristas.nome : "—")}`,
-      sub: `${tagUrgencia(o.urgencia)} ${tagStatus(o.status)}`,
+      sub: `${tagUrgencia(o.urgencia)} ${tagStatus(o.status)} ${origemOcorrencia(o)}`,
       corpo: `
       <div class="form-grid">
         <div><label>Veículo</label><div class="muted">${o.veiculos ? U.placaFmt(o.veiculos.placa) : "—"}</div></div>
@@ -115,7 +122,7 @@
     }
     alvo.innerHTML = `
       <div class="table-wrap"><table class="tbl">
-        <thead><tr><th>Urgência</th><th>Motorista</th><th>Veículo</th><th>Tipo</th><th>Descrição</th><th>Status</th><th>Relatada em</th></tr></thead>
+        <thead><tr><th>Urgência</th><th>Motorista</th><th>Veículo</th><th>Tipo</th><th>Descrição</th><th>Origem</th><th>Status</th><th>Relatada em</th></tr></thead>
         <tbody>
           ${lista.map(o => `
             <tr class="clickable" data-id="${o.id}">
@@ -124,6 +131,7 @@
               <td class="mono">${o.veiculos ? U.placaFmt(o.veiculos.placa) : "—"}</td>
               <td>${U.esc(rotuloTipo(o.tipo))}</td>
               <td><div class="td-main">${U.esc((o.descricao || "").slice(0, 50))}${(o.descricao || "").length > 50 ? "…" : ""}</div></td>
+              <td>${origemOcorrencia(o)}</td>
               <td>${tagStatus(o.status)}</td>
               <td class="mono">${U.dBR(o.criado_em)}</td>
             </tr>`).join("")}

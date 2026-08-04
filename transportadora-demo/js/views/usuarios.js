@@ -148,11 +148,15 @@
           if (!motoristaId) { U.toast("Escolha um motorista já cadastrado, ou desmarque a opção pra cadastrar um novo."); return; }
           dados.motorista_id = motoristaId;
         } else {
+          const cpf = document.getElementById("un-mot-cpf").value.trim();
+          const cnh = document.getElementById("un-mot-cnh").value.trim();
+          if (cpf && !U.validarCPF(cpf)) { U.toast("CPF do motorista inválido — confira os números."); return; }
+          if (cnh && !U.cnhFormatoValido(cnh)) { U.toast("Número da CNH inválido — precisa ter 11 dígitos."); return; }
           dados.novo_motorista = {
-            cpf: document.getElementById("un-mot-cpf").value.trim() || null,
+            cpf: cpf || null,
             rg: document.getElementById("un-mot-rg").value.trim() || null,
             telefone: document.getElementById("un-mot-tel").value.trim() || null,
-            cnh: document.getElementById("un-mot-cnh").value.trim() || null,
+            cnh: cnh || null,
             cnh_categoria: document.getElementById("un-mot-cnh-cat").value.trim() || null,
             cnh_validade: document.getElementById("un-mot-cnh-val").value || null,
           };
